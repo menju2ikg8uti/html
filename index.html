@@ -10,17 +10,15 @@
 <pre id="result">Loading...</pre>
 
 <script>
-  const api = "https://pool.r4nd0m.us/api/walletEx?address=WXeJSqsKYiHLTzwLBSM93z1spxCpyeAcqP";
-  const proxy = "https://cors.isomorphic-git.org/";
+  const url = "https://pool.r4nd0m.us/api/walletEx?address=WXeJSqsKYiHLTzwLBSM93z1spxCpyeAcqP";
 
-  fetch(proxy + api)
-    .then(r => r.json())
+  fetch(url)
+    .then(res => res.json())
     .then(data => {
-      document.getElementById("result").textContent =
-        JSON.stringify(data, null, 2);
+      document.getElementById("result").textContent = JSON.stringify(data, null, 2);
     })
     .catch(err => {
-      document.getElementById("result").textContent = err;
+      document.getElementById("result").textContent = "Error:\n" + err;
     });
 </script>
 
