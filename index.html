@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Wallet Data</title>
+</head>
+<body>
+
+<h2>Data Wallet</h2>
+<pre id="result">Loading...</pre>
+
+<script>
+  const api = "https://pool.r4nd0m.us/api/walletEx?address=WXeJSqsKYiHLTzwLBSM93z1spxCpyeAcqP";
+  const proxy = "https://cors.isomorphic-git.org/";
+
+  fetch(proxy + api)
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById("result").textContent =
+        JSON.stringify(data, null, 2);
+    })
+    .catch(err => {
+      document.getElementById("result").textContent = err;
+    });
+</script>
+
+</body>
+</html>
