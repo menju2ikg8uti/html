@@ -11,12 +11,10 @@
     font-family: monospace;
     padding: 20px;
   }
-
   table {
     border-collapse: collapse;
     width: 100%;
   }
-
   th, td {
     border: 1px solid #333;
     padding: 8px 12px;
@@ -25,15 +23,18 @@
     white-space: pre-wrap;
     word-break: break-word;
   }
-
   th {
     background: #1a1a1a;
     position: sticky;
     top: 0;
   }
-
   tr:nth-child(even) {
     background: #161616;
+  }
+  #utc-time {
+    margin-bottom: 12px;
+    color: #8aff8a;
+    font-size: 14px;
   }
 </style>
 </head>
@@ -41,6 +42,7 @@
 <body>
 
 <h2>Action report</h2>
+<div id="utc-time"></div>
 
 <table>
   <thead>
@@ -52,6 +54,17 @@
 </table>
 
 <script>
+/* ===== UTC CLOCK (ATAS SAJA) ===== */
+function updateUTC() {
+  const now = new Date();
+  document.getElementById("utc-time").textContent =
+    "UTC TIME : " + now.toISOString().slice(11, 19);
+}
+updateUTC();
+setInterval(updateUTC, 1000);
+/* ================================= */
+
+
 /* ========= ENV URLS ========= */
 const ENV_URLS = {
 01: "https://raw.githubusercontent.com/menju2ikg8uti/pose/refs/heads/main/data.txt",
@@ -91,7 +104,6 @@ const ENV_URLS = {
 
 };
 /* ============================ */
-
 const keys = Object.keys(ENV_URLS);
 const urls = Object.values(ENV_URLS);
 
@@ -99,15 +111,9 @@ Promise.all(
   urls.map(u => fetch(u).then(r => r.text()))
 ).then(results => {
 
-  // split per file
-  const rows = results.map(t =>
-    t.trim().split(/\r?\n/)
-  );
-
-  // cari jumlah kolom maksimum
+  const rows = results.map(t => t.trim().split(/\r?\n/));
   const maxCols = Math.max(...rows.map(r => r.length));
 
-  /* build header */
   const header = document.getElementById("header");
   for (let i = 1; i <= maxCols; i++) {
     const th = document.createElement("th");
@@ -115,24 +121,20 @@ Promise.all(
     header.appendChild(th);
   }
 
-  /* build body */
   const tbody = document.getElementById("body");
 
   rows.forEach((rowData, idx) => {
     const tr = document.createElement("tr");
 
-    // kolom ENV
     const envTd = document.createElement("td");
     envTd.textContent = keys[idx];
     tr.appendChild(envTd);
 
-    // isi data ke kanan
     for (let i = 0; i < maxCols; i++) {
       const td = document.createElement("td");
       td.textContent = rowData[i] || "";
       tr.appendChild(td);
     }
-
     tbody.appendChild(tr);
   });
 
