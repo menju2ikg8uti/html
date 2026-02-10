@@ -11,10 +11,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Checkout repo INI (buat commit tree.json)
+      - name: Checkout pages repo
+        uses: actions/checkout@v4
+
+      # 2️⃣ Clone repo TARGET (buat discan)
       - name: Clone target repo
         run: |
           git clone --depth=1 https://github.com/menju2ikg8uti/code.git repo
 
+      # 3️⃣ Generate tree.json
       - name: Generate tree.json
         run: |
           REPO="menju2ikg8uti/code"
@@ -23,7 +29,7 @@ jobs:
           echo "[" > tree.json
           cd repo
 
-          # FOLDER
+          # folders
           find . -type d \
             ! -path "./.git*" \
             | sed 's|^./||' \
@@ -32,7 +38,7 @@ jobs:
                 echo "  {\"type\":\"dir\",\"path\":\"$dir\"}," >> ../tree.json
               done
 
-          # FILE
+          # files
           find . -type f \
             ! -path "./.git/*" \
             | sed 's|^./||' \
@@ -44,6 +50,7 @@ jobs:
           sed -i '$ s/,$//' tree.json
           echo "]" >> tree.json
 
+      # 4️⃣ Commit tree.json (SEKARANG AMAN)
       - name: Commit tree.json
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
