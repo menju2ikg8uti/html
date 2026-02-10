@@ -50,4 +50,4 @@ jobs:
           git config user.email "github-actions@github.com"
           git add tree.json
           git commit -m "data: cycle finished"
-          git push pages
+          git push
