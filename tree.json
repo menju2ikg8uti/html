@@ -1,4 +1,10 @@
 [
+  {"type":"dir","path":"."},
+  {"type":"dir","path":"python"},
+  {"type":"dir","path":"cpp"},
+  {"type":"dir","path":"go"},
+  {"type":"dir","path":"mm"},
+  {"type":"dir","path":"cmake"},
   {"type":"file","path":"python/probability.py","raw":"https://raw.githubusercontent.com/menju2ikg8uti/code/main/python/probability.py"},
   {"type":"file","path":"python/graph.py","raw":"https://raw.githubusercontent.com/menju2ikg8uti/code/main/python/graph.py"},
   {"type":"file","path":"python/logger.py","raw":"https://raw.githubusercontent.com/menju2ikg8uti/code/main/python/logger.py"},
