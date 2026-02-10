@@ -15,8 +15,8 @@ jobs:
 
       - name: Generate tree.json
         run: |
-          REPO="${GITHUB_REPOSITORY}"
-          BRANCH="${GITHUB_REF_NAME}"
+          REPO="menju2ikg8uti/code"
+          BRANCH="main"
 
           echo "[" > tree.json
 
