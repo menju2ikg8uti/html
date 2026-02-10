@@ -1,17 +1,22 @@
 name: Generate tree.json
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build-tree:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout target repo
         uses: actions/checkout@v4
+        with:
+          repository: menju2ikg8uti/code
+          ref: main
+          path: repo
 
       - name: Generate tree.json
         run: |
@@ -19,25 +24,16 @@ jobs:
           BRANCH="main"
 
           echo "[" > tree.json
+          cd repo
 
           find . -type f \
             ! -path "./.git/*" \
-            ! -path "./.github/*" \
-            ! -name "tree.json" \
             | sed 's|^./||' \
             | while read file; do
-                echo "  {\"type\":\"file\",\"path\":\"$file\",\"raw\":\"https://raw.githubusercontent.com/$REPO/$BRANCH/$file\"}," >> tree.json
+                echo "  {\"type\":\"file\",\"path\":\"$file\",\"raw\":\"https://raw.githubusercontent.com/$REPO/$BRANCH/$file\"}," >> ../tree.json
               done
 
-          find . -type d \
-            ! -path "./.git*" \
-            ! -path "./.github*" \
-            | sed 's|^./||' \
-            | grep -v '^$' \
-            | while read dir; do
-                echo "  {\"type\":\"dir\",\"path\":\"$dir\"}," >> tree.json
-              done
-
+          cd ..
           sed -i '$ s/,$//' tree.json
           echo "]" >> tree.json
 
