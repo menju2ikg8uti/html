@@ -1,147 +1,147 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Action</title>
-<link rel="icon" type="image/x-icon" href="https://github.com/fluidicon.png">
-<style>
-  body {
-    background: #0f0f0f;
-    color: #eaeaea;
-    font-family: monospace;
-    padding: 20px;
-  }
-  table {
-    border-collapse: collapse;
-    width: 100%;
-  }
-  th, td {
-    border: 1px solid #333;
-    padding: 8px 12px;
-    text-align: center;
-    vertical-align: middle;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  th {
-    background: #1a1a1a;
-    position: sticky;
-    top: 0;
-  }
-  tr:nth-child(even) {
-    background: #161616;
-  }
-  #utc-time {
-    margin-bottom: 12px;
-    color: #8aff8a;
-    font-size: 14px;
-  }
-</style>
-</head>
-
-<body>
-
-<h2>Action report</h2>
-<div id="utc-time"></div>
-
-<table>
-  <thead>
-    <tr id="header">
-      <th>ENV</th>
-    </tr>
-  </thead>
-  <tbody id="body"></tbody>
-</table>
-
-<script>
-/* ===== UTC CLOCK (ATAS SAJA) ===== */
-function updateUTC() {
-  const now = new Date();
-  document.getElementById("utc-time").textContent =
-    "UTC TIME : " + now.toISOString().slice(11, 19);
-}
-updateUTC();
-setInterval(updateUTC, 1000);
-/* ================================= */
-
-
-/* ========= ENV URLS ========= */
-const ENV_URLS = {
-01: "https://raw.githubusercontent.com/menju2ikg8uti/pose/refs/heads/main/data.txt",
-02: "https://raw.githubusercontent.com/perxsimuvo0ke2/de-jiang/refs/heads/main/data.txt",
-03: "https://raw.githubusercontent.com/majuxki2os02/de-guang/refs/heads/main/data.txt",
-04: "https://raw.githubusercontent.com/mariki952/xiru/refs/heads/main/data.txt",
-05: "https://raw.githubusercontent.com/xerokgi3kdn/de-xuan/refs/heads/main/data.txt",
-06: "https://raw.githubusercontent.com/xerujihetu2ju/pose/refs/heads/main/data.txt",
-07: "https://raw.githubusercontent.com/xehatu7g45/xera/refs/heads/main/data.txt",
-08: "https://raw.githubusercontent.com/xejuyt2kiso/xrte/refs/heads/main/data.txt",
-09: "https://raw.githubusercontent.com/certuyixo2l4/de-pose/refs/heads/main/data.txt",
-10: "https://raw.githubusercontent.com/mertimal2xer2/superz/refs/heads/main/data.txt",
-11: "https://raw.githubusercontent.com/xejguhy3de6/lose/refs/heads/main/data.txt",
-12: "https://raw.githubusercontent.com/barthu3jis8/rian/refs/heads/main/data.txt",
-13: "https://raw.githubusercontent.com/xeyuji2ntian2/cast/refs/heads/main/data.txt",
-14: "https://raw.githubusercontent.com/mgnhuvj2ute3/gepro/refs/heads/main/data.txt",
-15: "https://raw.githubusercontent.com/kijutian3ki/gwt/refs/heads/main/data.txt",
-16: "https://raw.githubusercontent.com/majuxhiku3jgy4/python/refs/heads/main/data.txt",
-17: "https://raw.githubusercontent.com/mnejit2iande5rong/jemis/refs/heads/main/data.txt",
-18: "https://raw.githubusercontent.com/kujtian7k4rong/go/refs/heads/main/data.txt",
-19: "https://raw.githubusercontent.com/kujtian7k4rong/go/refs/heads/main/data.txt",
-20: "https://raw.githubusercontent.com/xehuj25he4/noke/refs/heads/main/data.txt",
-21: "https://raw.githubusercontent.com/manu36fgu/roin/refs/heads/main/data.txt",
-22: "https://raw.githubusercontent.com/mejuhy25fer4/hrater/refs/heads/main/data.txt",
-23: "https://raw.githubusercontent.com/manj2f7y1/mir/refs/heads/main/data.txt",
-24: "https://raw.githubusercontent.com/xe3it8j5/maki/refs/heads/main/data.txt",
-25: "https://raw.githubusercontent.com/neh2jux72/xerte/refs/heads/main/data.txt",
-26: "https://raw.githubusercontent.com/me25hu8e3/getur/refs/heads/main/data.txt",
-27: "https://raw.githubusercontent.com/xe2po0mi5re3/xure/refs/heads/main/data.txt",
-28: "https://raw.githubusercontent.com/me8uy6upo0/xer2/refs/heads/main/data.txt",
-29: "https://raw.githubusercontent.com/xer3uy7muse/geru/refs/heads/main/data.txt",
-30: "https://raw.githubusercontent.com/xe7umin9ki/fara/refs/heads/main/data.txt",
-31: "https://raw.githubusercontent.com/xe7uhtu21k/jukre/refs/heads/main/data.txt",
-32: "https://raw.githubusercontent.com/xemu2li9d2/vere/refs/heads/main/data.txt",
-33: "https://raw.githubusercontent.com/muji32ki95/verbose/refs/heads/main/data.txt",
-34: "https://raw.githubusercontent.com/xege3vq16/roxa/refs/heads/main/data.txt",
-
-};
-/* ============================ */
-const keys = Object.keys(ENV_URLS);
-const urls = Object.values(ENV_URLS);
-
-Promise.all(
-  urls.map(u => fetch(u).then(r => r.text()))
-).then(results => {
-
-  const rows = results.map(t => t.trim().split(/\r?\n/));
-  const maxCols = Math.max(...rows.map(r => r.length));
-
-  const header = document.getElementById("header");
-  for (let i = 1; i <= maxCols; i++) {
-    const th = document.createElement("th");
-    th.textContent = i;
-    header.appendChild(th);
-  }
-
-  const tbody = document.getElementById("body");
-
-  rows.forEach((rowData, idx) => {
-    const tr = document.createElement("tr");
-
-    const envTd = document.createElement("td");
-    envTd.textContent = keys[idx];
-    tr.appendChild(envTd);
-
-    for (let i = 0; i < maxCols; i++) {
-      const td = document.createElement("td");
-      td.textContent = rowData[i] || "";
-      tr.appendChild(td);
+  <meta charset="UTF-8" />
+  <title>Repo File Browser</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0d1117;
+      --fg: #c9d1d9;
+      --border: #30363d;
+      --hover: #161b22;
+      --prebg: #010409;
+      --btn: #238636;
+      --btnhover: #2ea043;
     }
-    tbody.appendChild(tr);
-  });
+    body.light {
+      --bg: #ffffff;
+      --fg: #24292f;
+      --border: #d0d7de;
+      --hover: #f6f8fa;
+      --prebg: #f6f8fa;
+      --btn: #2da44e;
+      --btnhover: #2c974b;
+    }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+    }
+    header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+    }
+    #path { font-size: 14px; color: #8b949e; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li {
+      display: flex;
+      align-items: center;
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+    li:hover { background: var(--hover); }
+    .icon { width: 20px; margin-right: 10px; opacity: 0.8; }
+    pre {
+      background: var(--prebg);
+      padding: 16px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    button {
+      background: var(--btn);
+      border: none;
+      color: white;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover { background: var(--btnhover); }
+    #viewer { padding: 16px; border-top: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+  <header>
+    📁 GitHub Repo Browser
+    <div id="path">/</div>
+    <button id="themeToggle" style="float:right;margin-top:-24px">🌙 Dark</button>
+  </header>
 
-}).catch(err => {
-  document.body.innerHTML += "<pre>Error: " + err + "</pre>";
-});
-</script>
+  <ul id="fileList"></ul>
 
+  <div id="viewer" style="display:none">
+    <button id="copyBtn">📋 Copy file content</button>
+    <pre id="content"></pre>
+  </div>
+
+  <script>
+    const owner = "menju2ikg8uti";
+    const repo = "code";
+    let currentPath = "";
+
+    async function loadPath(path = "") {
+      currentPath = path;
+      document.getElementById("path").textContent = "/" + path;
+      document.getElementById("viewer").style.display = "none";
+
+      const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`);
+      const data = await res.json();
+
+      const list = document.getElementById("fileList");
+      list.innerHTML = "";
+
+      if (path) {
+        const up = document.createElement("li");
+        up.innerHTML = "⬅️ ..";
+        up.onclick = () => loadPath(path.split('/').slice(0, -1).join('/'));
+        list.appendChild(up);
+      }
+
+      data.forEach(item => {
+        const li = document.createElement("li");
+        li.innerHTML = `<span class=\"icon\">${item.type === 'dir' ? '📁' : '📄'}</span>${item.name}`;
+        li.onclick = () => {
+          if (item.type === "dir") {
+            loadPath(item.path);
+          } else {
+            loadFile(item.download_url);
+          }
+        };
+        list.appendChild(li);
+      });
+    }
+
+    async function loadFile(url) {
+      const res = await fetch(url);
+      const text = await res.text();
+      document.getElementById("content").textContent = text;
+      document.getElementById("viewer").style.display = "block";
+
+      document.getElementById("copyBtn").onclick = () => {
+        navigator.clipboard.writeText(text);
+        alert("Copied!");
+      };
+    }
+
+    loadPath();
+
+    const toggle = document.getElementById("themeToggle");
+    const saved = localStorage.getItem("theme");
+    if (saved === "light") {
+      document.body.classList.add("light");
+      toggle.textContent = "🌞 Light";
+    }
+
+    toggle.onclick = () => {
+      document.body.classList.toggle("light");
+      const isLight = document.body.classList.contains("light");
+      toggle.textContent = isLight ? "🌞 Light" : "🌙 Dark";
+      localStorage.setItem("theme", isLight ? "light" : "dark");
+    };
+  </script>
 </body>
 </html>
