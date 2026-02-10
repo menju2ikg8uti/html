@@ -11,8 +11,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout target repo
-        uses: actions/checkout@v4
       - name: Clone target repo
         run: |
           git clone --depth=1 https://github.com/menju2ikg8uti/code.git repo
@@ -25,6 +23,16 @@ jobs:
           echo "[" > tree.json
           cd repo
 
+          # FOLDER
+          find . -type d \
+            ! -path "./.git*" \
+            | sed 's|^./||' \
+            | grep -v '^$' \
+            | while read dir; do
+                echo "  {\"type\":\"dir\",\"path\":\"$dir\"}," >> ../tree.json
+              done
+
+          # FILE
           find . -type f \
             ! -path "./.git/*" \
             | sed 's|^./||' \
