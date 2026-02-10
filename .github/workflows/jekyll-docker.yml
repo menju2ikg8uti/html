@@ -1,0 +1,48 @@
+name: Generate tree.json
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-tree:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Generate tree.json
+        run: |
+          REPO="${GITHUB_REPOSITORY}"
+          BRANCH="${GITHUB_REF_NAME}"
+
+          echo "[" > tree.json
+
+          find . -type f \
+            ! -path "./.git/*" \
+            ! -path "./.github/*" \
+            ! -name "tree.json" \
+            | sed 's|^./||' \
+            | while read file; do
+                echo "  {\"type\":\"file\",\"path\":\"$file\",\"raw\":\"https://raw.githubusercontent.com/$REPO/$BRANCH/$file\"}," >> tree.json
+              done
+
+          find . -type d \
+            ! -path "./.git*" \
+            ! -path "./.github*" \
+            | sed 's|^./||' \
+            | grep -v '^$' \
+            | while read dir; do
+                echo "  {\"type\":\"dir\",\"path\":\"$dir\"}," >> tree.json
+              done
+
+          sed -i '$ s/,$//' tree.json
+          echo "]" >> tree.json
+
+      - name: Commit tree.json
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "auto: update tree.json"
+          file_pattern: tree.json
