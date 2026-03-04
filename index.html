@@ -1,113 +1,135 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Repo Tree Browser</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    :root {
-      --bg: #0d1117;
-      --fg: #c9d1d9;
-      --border: #30363d;
-      --hover: #161b22;
-      --btn: #238636;
-    }
-    body.light {
-      --bg: #ffffff;
-      --fg: #24292f;
-      --border: #d0d7de;
-      --hover: #f6f8fa;
-      --btn: #2da44e;
-    }
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--bg);
-      color: var(--fg);
-    }
-    header {
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-weight: 600;
-    }
-    ul {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    li {
-      display: flex;
-      align-items: center;
-      padding: 8px 16px;
-      border-bottom: 1px solid var(--border);
-    }
-    li:hover { background: var(--hover); }
-    .name { cursor: pointer; }
-    .btn {
-      margin-left: auto;
-      background: var(--btn);
-      border: none;
-      color: white;
-      border-radius: 6px;
-      padding: 4px 8px;
-      cursor: pointer;
-    }
-    .btn:disabled { opacity: 0.6; cursor: default; }
-  </style>
+<meta charset="UTF-8" />
+<title>Repo Tree Browser</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+:root{
+  --bg:#0d1117;
+  --fg:#c9d1d9;
+  --border:#30363d;
+  --hover:#161b22;
+  --btn:#238636;
+}
+body.light{
+  --bg:#ffffff;
+  --fg:#24292f;
+  --border:#d0d7de;
+  --hover:#f6f8fa;
+  --btn:#2da44e;
+}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+  background:var(--bg);
+  color:var(--fg);
+}
+header{
+  padding:12px 16px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  font-weight:600;
+}
+.grid{
+  display:grid;
+  gap:0;
+}
+.item{
+  display:flex;
+  align-items:center;
+  padding:8px 16px;
+  border-bottom:1px solid var(--border);
+  border-right:1px solid var(--border);
+}
+.item:hover{ background:var(--hover); }
+.name{ cursor:pointer; }
+.btn{
+  margin-left:auto;
+  background:var(--btn);
+  border:none;
+  color:white;
+  border-radius:6px;
+  padding:4px 8px;
+  cursor:pointer;
+}
+.btn:disabled{ opacity:.6; cursor:default; }
+</style>
 </head>
 <body>
-  <header>
-    📁 Repo Browser (tree.json)
-    <button id="theme" class="btn">🌙</button>
-  </header>
 
-  <ul id="list"></ul>
+<header>
+📁 Repo Browser (tree.json)
+<button id="theme" class="btn">🌙</button>
+</header>
 
-  <script>
-    const list = document.getElementById('list');
-    const themeBtn = document.getElementById('theme');
+<div id="grid" class="grid"></div>
 
-    // theme
-    if (localStorage.theme === 'light') document.body.classList.add('light');
-    themeBtn.onclick = () => {
-      document.body.classList.toggle('light');
-      localStorage.theme = document.body.classList.contains('light') ? 'light' : 'dark';
-    };
+<script>
+const grid = document.getElementById('grid');
+const themeBtn = document.getElementById('theme');
 
-    // load tree.json (NO GitHub API)
-    fetch('./tree.json')
-      .then(r => r.json())
-      .then(data => render(data));
+if(localStorage.theme==='light') document.body.classList.add('light');
+themeBtn.onclick=()=>{
+  document.body.classList.toggle('light');
+  localStorage.theme=document.body.classList.contains('light')?'light':'dark';
+};
 
-    function render(items) {
-      list.innerHTML = '';
-      items.forEach(item => {
-        const li = document.createElement('li');
-        const name = document.createElement('span');
-        name.textContent = item.type === 'dir' ? '📁 ' + item.path : '📄 ' + item.path;
-        name.className = 'name';
-        li.appendChild(name);
+fetch('./tree.json')
+.then(r=>r.json())
+.then(data=>render(data));
 
-        if (item.type === 'file') {
-          const btn = document.createElement('button');
-          btn.textContent = '📋';
-          btn.className = 'btn';
-          btn.onclick = async () => {
-            btn.disabled = true;
-            const res = await fetch(item.raw);
-            const text = await res.text();
-            await navigator.clipboard.writeText(text);
-            btn.textContent = '✅';
-            setTimeout(() => { btn.textContent = '📋'; btn.disabled = false; }, 1000);
-          };
-          li.appendChild(btn);
-        }
-        list.appendChild(li);
-      });
+function render(items){
+  grid.innerHTML='';
+
+  const rowsPerColumn = 10;
+  const total = items.length;
+  const columns = Math.ceil(total / rowsPerColumn);
+
+  grid.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+
+  for(let r=0;r<rowsPerColumn;r++){
+    for(let c=0;c<columns;c++){
+      const index = r + c * rowsPerColumn;
+      if(index >= total) continue;
+
+      const item = items[index];
+      const div = document.createElement('div');
+      div.className='item';
+
+      const name = document.createElement('span');
+      name.textContent = item.type==='dir'
+        ? '📁 '+item.path
+        : '📄 '+item.path;
+
+      name.className='name';
+      div.appendChild(name);
+
+      if(item.type==='file'){
+        const btn=document.createElement('button');
+        btn.textContent='📋';
+        btn.className='btn';
+        btn.onclick=async()=>{
+          btn.disabled=true;
+          const res=await fetch(item.raw);
+          const text=await res.text();
+          await navigator.clipboard.writeText(text);
+          btn.textContent='✅';
+          setTimeout(()=>{
+            btn.textContent='📋';
+            btn.disabled=false;
+          },1000);
+        };
+        div.appendChild(btn);
+      }
+
+      grid.appendChild(div);
     }
-  </script>
+  }
+}
+</script>
+
 </body>
 </html>
