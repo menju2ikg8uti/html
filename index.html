@@ -2,102 +2,94 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<title>DOGE Live Chart</title>
-
+<title>DOGE Spot Realtime FIX</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<style>
-body {
-    font-family: Arial;
-    text-align: center;
-    background: #0f172a;
-    color: white;
-}
-.container {
-    width: 90%;
-    margin: auto;
-}
-canvas {
-    background: white;
-    border-radius: 10px;
-}
-</style>
-
 </head>
+
 <body>
+<h2>DOGE/USDT SPOT (FIX)</h2>
+<p id="price">Connecting...</p>
+<p id="status"></p>
 
-<div class="container">
-    <h2>DOGE/USDT Live Chart (MEXC)</h2>
-    <p id="price">Loading...</p>
-    <p id="time"></p>
-
-    <canvas id="chart" height="100"></canvas>
-</div>
+<canvas id="chart" height="100"></canvas>
 
 <script>
+let ws;
+let chart;
 let prices = [];
 let labels = [];
 
-const ctx = document.getElementById('chart').getContext('2d');
-
-const chart = new Chart(ctx, {
-    type: 'line',
-    data: {
-        labels: labels,
-        datasets: [{
-            label: 'DOGE Price',
-            data: prices,
-            borderWidth: 2,
-            tension: 0.2
-        }]
-    },
-    options: {
-        responsive: true,
-        scales: {
-            x: {
-                ticks: { color: 'black' }
-            },
-            y: {
-                ticks: { color: 'black' }
-            }
+function initChart() {
+    const ctx = document.getElementById('chart').getContext('2d');
+    chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'DOGE Price',
+                data: prices,
+                borderWidth: 2,
+                tension: 0.2
+            }]
+        },
+        options: {
+            animation: false
         }
-    }
-});
-
-async function getPrice() {
-    try {
-        const res = await fetch("https://api.mexc.com/api/v3/ticker/price?symbol=DOGEUSDT");
-        const data = await res.json();
-
-        const price = parseFloat(data.price);
-        const now = new Date().toLocaleTimeString();
-
-        // update UI
-        document.getElementById("price").innerText = "Price: " + price + " USDT";
-        document.getElementById("time").innerText = "Update: " + now;
-
-        // simpan data
-        prices.push(price);
-        labels.push(now);
-
-        // batasi data biar ga berat (max 50 titik)
-        if (prices.length > 50) {
-            prices.shift();
-            labels.shift();
-        }
-
-        chart.update();
-
-    } catch (err) {
-        console.error(err);
-    }
+    });
 }
 
-// load pertama
-getPrice();
+function connectWS() {
+    ws = new WebSocket("wss://wbs-api.mexc.com/ws");
 
-// update tiap 5 menit
-setInterval(getPrice, 300000);
+    ws.onopen = () => {
+        document.getElementById("status").innerText = "Connected";
+
+        // subscribe
+        ws.send(JSON.stringify({
+            method: "SUBSCRIPTION",
+            params: ["spot@public.deals.v3.api@DOGEUSDT"],
+            id: 1
+        }));
+
+        // ping tiap 20 detik
+        setInterval(() => {
+            ws.send(JSON.stringify({ method: "PING" }));
+        }, 20000);
+    };
+
+    ws.onmessage = (msg) => {
+        const data = JSON.parse(msg.data);
+
+        if (data.d && data.d.deals && data.d.deals.length > 0) {
+            const price = parseFloat(data.d.deals[0].p);
+            const time = new Date().toLocaleTimeString();
+
+            document.getElementById("price").innerText = "Price: " + price;
+
+            prices.push(price);
+            labels.push(time);
+
+            if (prices.length > 100) {
+                prices.shift();
+                labels.shift();
+            }
+
+            chart.update();
+        }
+    };
+
+    ws.onerror = () => {
+        document.getElementById("status").innerText = "Error";
+    };
+
+    ws.onclose = () => {
+        document.getElementById("status").innerText = "Reconnect...";
+        setTimeout(connectWS, 3000);
+    };
+}
+
+initChart();
+connectWS();
 </script>
 
 </body>
