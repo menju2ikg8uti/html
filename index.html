@@ -1,134 +1,103 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
-<meta charset="UTF-8" />
-<title>Repo Tree Browser</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta charset="UTF-8">
+<title>DOGE Live Chart</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
-:root{
-  --bg:#0d1117;
-  --fg:#c9d1d9;
-  --border:#30363d;
-  --hover:#161b22;
-  --btn:#238636;
+body {
+    font-family: Arial;
+    text-align: center;
+    background: #0f172a;
+    color: white;
 }
-body.light{
-  --bg:#ffffff;
-  --fg:#24292f;
-  --border:#d0d7de;
-  --hover:#f6f8fa;
-  --btn:#2da44e;
+.container {
+    width: 90%;
+    margin: auto;
 }
-body{
-  margin:0;
-  font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
-  background:var(--bg);
-  color:var(--fg);
+canvas {
+    background: white;
+    border-radius: 10px;
 }
-header{
-  padding:12px 16px;
-  border-bottom:1px solid var(--border);
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  font-weight:600;
-}
-.grid{
-  display:grid;
-  gap:0;
-}
-.item{
-  display:flex;
-  align-items:center;
-  padding:8px 16px;
-  border-bottom:1px solid var(--border);
-  border-right:1px solid var(--border);
-}
-.item:hover{ background:var(--hover); }
-.name{ cursor:pointer; }
-.btn{
-  margin-left:auto;
-  background:var(--btn);
-  border:none;
-  color:white;
-  border-radius:6px;
-  padding:4px 8px;
-  cursor:pointer;
-}
-.btn:disabled{ opacity:.6; cursor:default; }
 </style>
+
 </head>
 <body>
 
-<header>
-📁 Repo Browser (tree.json)
-<button id="theme" class="btn">🌙</button>
-</header>
+<div class="container">
+    <h2>DOGE/USDT Live Chart (MEXC)</h2>
+    <p id="price">Loading...</p>
+    <p id="time"></p>
 
-<div id="grid" class="grid"></div>
+    <canvas id="chart" height="100"></canvas>
+</div>
 
 <script>
-const grid = document.getElementById('grid');
-const themeBtn = document.getElementById('theme');
+let prices = [];
+let labels = [];
 
-if(localStorage.theme==='light') document.body.classList.add('light');
-themeBtn.onclick=()=>{
-  document.body.classList.toggle('light');
-  localStorage.theme=document.body.classList.contains('light')?'light':'dark';
-};
+const ctx = document.getElementById('chart').getContext('2d');
 
-fetch('./tree.json')
-.then(r=>r.json())
-.then(data=>render(data));
-
-function render(items){
-  grid.innerHTML='';
-
-  const rowsPerColumn = 10;
-  const total = items.length;
-  const columns = Math.ceil(total / rowsPerColumn);
-
-  grid.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
-
-  for(let r=0;r<rowsPerColumn;r++){
-    for(let c=0;c<columns;c++){
-      const index = r + c * rowsPerColumn;
-      if(index >= total) continue;
-
-      const item = items[index];
-      const div = document.createElement('div');
-      div.className='item';
-
-      const name = document.createElement('span');
-      name.textContent = item.type==='dir'
-        ? '📁 '+item.path
-        : '📄 '+item.path;
-
-      name.className='name';
-      div.appendChild(name);
-
-      if(item.type==='file'){
-        const btn=document.createElement('button');
-        btn.textContent='📋';
-        btn.className='btn';
-        btn.onclick=async()=>{
-          btn.disabled=true;
-          const res=await fetch(item.raw);
-          const text=await res.text();
-          await navigator.clipboard.writeText(text);
-          btn.textContent='✅';
-          setTimeout(()=>{
-            btn.textContent='📋';
-            btn.disabled=false;
-          },1000);
-        };
-        div.appendChild(btn);
-      }
-
-      grid.appendChild(div);
+const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: labels,
+        datasets: [{
+            label: 'DOGE Price',
+            data: prices,
+            borderWidth: 2,
+            tension: 0.2
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            x: {
+                ticks: { color: 'black' }
+            },
+            y: {
+                ticks: { color: 'black' }
+            }
+        }
     }
-  }
+});
+
+async function getPrice() {
+    try {
+        const res = await fetch("https://api.mexc.com/api/v3/ticker/price?symbol=DOGEUSDT");
+        const data = await res.json();
+
+        const price = parseFloat(data.price);
+        const now = new Date().toLocaleTimeString();
+
+        // update UI
+        document.getElementById("price").innerText = "Price: " + price + " USDT";
+        document.getElementById("time").innerText = "Update: " + now;
+
+        // simpan data
+        prices.push(price);
+        labels.push(now);
+
+        // batasi data biar ga berat (max 50 titik)
+        if (prices.length > 50) {
+            prices.shift();
+            labels.shift();
+        }
+
+        chart.update();
+
+    } catch (err) {
+        console.error(err);
+    }
 }
+
+// load pertama
+getPrice();
+
+// update tiap 5 menit
+setInterval(getPrice, 300000);
 </script>
 
 </body>
