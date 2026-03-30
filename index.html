@@ -20,41 +20,57 @@ body {
 <p id="status"></p>
 
 <script>
-// koneksi ke EDGE (futures)
-const ws = new WebSocket("wss://contract.mexc.com/edge");
+let ws;
+let reconnectDelay = 5000; // mulai 5 detik
+const maxDelay = 30000;    // maksimal 30 detik
 
-ws.onopen = () => {
-    document.getElementById("status").innerText = "Connected";
+function connectWS() {
+    ws = new WebSocket("wss://contract.mexc.com/edge");
 
-    ws.send(JSON.stringify({
-        method: "sub.ticker",
-        param: {
-            symbol: "DOGE_USDT"
+    ws.onopen = () => {
+        document.getElementById("status").innerText = "Connected";
+
+        // reset delay kalau sukses connect
+        reconnectDelay = 5000;
+
+        ws.send(JSON.stringify({
+            method: "sub.ticker",
+            param: {
+                symbol: "DOGE_USDT"
+            }
+        }));
+    };
+
+    ws.onmessage = (msg) => {
+        const data = JSON.parse(msg.data);
+
+        if (data.data && data.data.lastPrice) {
+            const price = parseFloat(data.data.lastPrice);
+
+            document.getElementById("price").innerText = "(" + price + ")";
+            document.title = price;
         }
-    }));
-};
+    };
 
-ws.onmessage = (msg) => {
-    const data = JSON.parse(msg.data);
+    ws.onerror = () => {
+        document.getElementById("status").innerText = "Error";
+        ws.close();
+    };
 
-    if (data.data && data.data.lastPrice) {
-        const price = parseFloat(data.data.lastPrice);
+    ws.onclose = () => {
+        document.getElementById("status").innerText = "Reconnect in " + (reconnectDelay/1000) + "s";
 
-        document.getElementById("price").innerText = "(" + price + ")";
+        setTimeout(() => {
+            connectWS();
+        }, reconnectDelay);
 
-        // update title realtime
-        document.title = price;
-    }
-};
+        // naikkan delay (exponential)
+        reconnectDelay = Math.min(reconnectDelay * 2, maxDelay);
+    };
+}
 
-ws.onerror = () => {
-    document.getElementById("status").innerText = "Error";
-};
-
-ws.onclose = () => {
-    document.getElementById("status").innerText = "Disconnected";
-    setTimeout(() => location.reload(), 3000);
-};
+// start pertama
+connectWS();
 </script>
 
 </body>
