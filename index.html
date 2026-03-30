@@ -2,94 +2,55 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<title>DOGE Spot Realtime FIX</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
+<title>price</title>
 
+<style>
+body {
+    font-family: Arial;
+    text-align: center;
+    background: #0f172a;
+    color: white;
+}
+</style>
+</head>
 <body>
-<h2>DOGE/USDT SPOT (FIX)</h2>
-<p id="price">Connecting...</p>
+
+<h2>DOGE/USD</h2>
+<p id="price">(connecting...)</p>
 <p id="status"></p>
 
-<canvas id="chart" height="100"></canvas>
-
 <script>
-let ws;
-let chart;
-let prices = [];
-let labels = [];
+// koneksi ke EDGE (futures)
+const ws = new WebSocket("wss://contract.mexc.com/edge");
 
-function initChart() {
-    const ctx = document.getElementById('chart').getContext('2d');
-    chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'DOGE Price',
-                data: prices,
-                borderWidth: 2,
-                tension: 0.2
-            }]
-        },
-        options: {
-            animation: false
+ws.onopen = () => {
+    document.getElementById("status").innerText = "Connected";
+
+    ws.send(JSON.stringify({
+        method: "sub.ticker",
+        param: {
+            symbol: "DOGE_USDT"
         }
-    });
-}
+    }));
+};
 
-function connectWS() {
-    ws = new WebSocket("wss://wbs-api.mexc.com/ws");
+ws.onmessage = (msg) => {
+    const data = JSON.parse(msg.data);
 
-    ws.onopen = () => {
-        document.getElementById("status").innerText = "Connected";
+    if (data.data && data.data.lastPrice) {
+        const price = parseFloat(data.data.lastPrice);
+        document.getElementById("price").innerText = "(" + price + ")";
+    }
+};
 
-        // subscribe
-        ws.send(JSON.stringify({
-            method: "SUBSCRIPTION",
-            params: ["spot@public.deals.v3.api@DOGEUSDT"],
-            id: 1
-        }));
+ws.onerror = () => {
+    document.getElementById("status").innerText = "Error";
+};
 
-        // ping tiap 20 detik
-        setInterval(() => {
-            ws.send(JSON.stringify({ method: "PING" }));
-        }, 20000);
-    };
-
-    ws.onmessage = (msg) => {
-        const data = JSON.parse(msg.data);
-
-        if (data.d && data.d.deals && data.d.deals.length > 0) {
-            const price = parseFloat(data.d.deals[0].p);
-            const time = new Date().toLocaleTimeString();
-
-            document.getElementById("price").innerText = "Price: " + price;
-
-            prices.push(price);
-            labels.push(time);
-
-            if (prices.length > 100) {
-                prices.shift();
-                labels.shift();
-            }
-
-            chart.update();
-        }
-    };
-
-    ws.onerror = () => {
-        document.getElementById("status").innerText = "Error";
-    };
-
-    ws.onclose = () => {
-        document.getElementById("status").innerText = "Reconnect...";
-        setTimeout(connectWS, 3000);
-    };
-}
-
-initChart();
-connectWS();
+ws.onclose = () => {
+    document.getElementById("status").innerText = "Disconnected";
+    setTimeout(() => location.reload(), 3000);
+};
 </script>
 
 </body>
