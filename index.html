@@ -39,7 +39,11 @@ ws.onmessage = (msg) => {
 
     if (data.data && data.data.lastPrice) {
         const price = parseFloat(data.data.lastPrice);
+
         document.getElementById("price").innerText = "(" + price + ")";
+
+        // update title realtime
+        document.title = price;
     }
 };
 
