@@ -1,108 +1,40 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>price</title>
-
-<style>
-body {
-    font-family: Arial;
-    text-align: center;
-    background: #0f172a;
-    color: white;
-}
-input {
-    padding: 5px;
-    font-size: 16px;
-    text-align: center;
-}
-#percent {
-    font-size: 20px;
-    margin-top: 10px;
-}
-</style>
+<title>DOGE REST DEBUG</title>
 </head>
 <body>
 
-<h2>DOGE/USD</h2>
-
-<p>
-Entry Price: 
-<input type="number" id="entry" placeholder="input harga" step="0.0001">
-</p>
-
-<p id="price">(connecting...)</p>
-<p id="percent">-</p>
-<p id="status"></p>
+<h2 id="price">Loading...</h2>
 
 <script>
-let ws;
-let reconnectDelay = 5000;
-const maxDelay = 30000;
+let lastPrice = null;
 
-function connectWS() {
-    ws = new WebSocket("wss://contract.mexc.com/edge");
+async function getPrice() {
+    try {
+        const res = await fetch("https://api.mexc.com/api/v3/ticker/price?symbol=DOGEUSDT");
 
-    ws.onopen = () => {
-        document.getElementById("status").innerText = "Connected";
-        reconnectDelay = 5000;
+        console.log("STATUS:", res.status);
 
-        ws.send(JSON.stringify({
-            method: "sub.ticker",
-            param: {
-                symbol: "DOGE_USDT"
-            }
-        }));
-    };
+        const text = await res.text();
+        console.log("RAW RESPONSE:", text);
 
-    ws.onmessage = (msg) => {
-        const data = JSON.parse(msg.data);
+        const data = JSON.parse(text);
 
-        if (data.data && data.data.lastPrice) {
-            const price = parseFloat(data.data.lastPrice);
-            const entry = parseFloat(document.getElementById("entry").value);
+        const price = parseFloat(data.price);
 
-            document.getElementById("price").innerText = "(" + price + ")";
+        document.getElementById("price").innerText = price;
 
-            if (!isNaN(entry) && entry > 0) {
-                const percent = ((price - entry) / entry) * 100;
-                const el = document.getElementById("percent");
+        lastPrice = price;
 
-                const percentText = percent.toFixed(2);
-
-                el.innerText = percentText + " %";
-
-                if (percent > 0) {
-                    el.style.color = "lime";
-                } else if (percent < 0) {
-                    el.style.color = "red";
-                } else {
-                    el.style.color = "white";
-                }
-
-                // update title (price + percent)
-                document.title = price + " (" + percentText + "%)";
-            } else {
-                // kalau belum ada entry
-                document.title = price;
-            }
-        }
-    };
-
-    ws.onerror = () => {
-        document.getElementById("status").innerText = "Error";
-        ws.close();
-    };
-
-    ws.onclose = () => {
-        document.getElementById("status").innerText = "Reconnect in " + (reconnectDelay/1000) + "s";
-
-        setTimeout(connectWS, reconnectDelay);
-        reconnectDelay = Math.min(reconnectDelay * 2, maxDelay);
-    };
+    } catch (err) {
+        console.error("FULL ERROR:", err);
+    }
 }
 
-connectWS();
+setInterval(getPrice, 2000);
+getPrice();
 </script>
 
 </body>
