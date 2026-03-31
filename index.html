@@ -11,26 +11,40 @@ body {
     background: #0f172a;
     color: white;
 }
+input {
+    padding: 5px;
+    font-size: 16px;
+    text-align: center;
+}
+#percent {
+    font-size: 20px;
+    margin-top: 10px;
+}
 </style>
 </head>
 <body>
 
 <h2>DOGE/USD</h2>
+
+<p>
+Entry Price: 
+<input type="number" id="entry" placeholder="input harga" step="0.0001">
+</p>
+
 <p id="price">(connecting...)</p>
+<p id="percent">-</p>
 <p id="status"></p>
 
 <script>
 let ws;
-let reconnectDelay = 5000; // mulai 5 detik
-const maxDelay = 30000;    // maksimal 30 detik
+let reconnectDelay = 5000;
+const maxDelay = 30000;
 
 function connectWS() {
     ws = new WebSocket("wss://contract.mexc.com/edge");
 
     ws.onopen = () => {
         document.getElementById("status").innerText = "Connected";
-
-        // reset delay kalau sukses connect
         reconnectDelay = 5000;
 
         ws.send(JSON.stringify({
@@ -46,9 +60,32 @@ function connectWS() {
 
         if (data.data && data.data.lastPrice) {
             const price = parseFloat(data.data.lastPrice);
+            const entry = parseFloat(document.getElementById("entry").value);
 
             document.getElementById("price").innerText = "(" + price + ")";
-            document.title = price;
+
+            if (!isNaN(entry) && entry > 0) {
+                const percent = ((price - entry) / entry) * 100;
+                const el = document.getElementById("percent");
+
+                const percentText = percent.toFixed(2);
+
+                el.innerText = percentText + " %";
+
+                if (percent > 0) {
+                    el.style.color = "lime";
+                } else if (percent < 0) {
+                    el.style.color = "red";
+                } else {
+                    el.style.color = "white";
+                }
+
+                // update title (price + percent)
+                document.title = price + " (" + percentText + "%)";
+            } else {
+                // kalau belum ada entry
+                document.title = price;
+            }
         }
     };
 
@@ -60,16 +97,11 @@ function connectWS() {
     ws.onclose = () => {
         document.getElementById("status").innerText = "Reconnect in " + (reconnectDelay/1000) + "s";
 
-        setTimeout(() => {
-            connectWS();
-        }, reconnectDelay);
-
-        // naikkan delay (exponential)
+        setTimeout(connectWS, reconnectDelay);
         reconnectDelay = Math.min(reconnectDelay * 2, maxDelay);
     };
 }
 
-// start pertama
 connectWS();
 </script>
 
