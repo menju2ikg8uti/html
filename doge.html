@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Connecting...</title>
+<style>
+  body {
+    background-color: #1e1e1e;
+    color: #ffffff;
+    font-family: monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    margin: 0;
+  }
+  h3 {
+    margin-bottom: 10px;
+  }
+  input {
+    font-size: 1rem;
+    padding: 5px;
+    margin-bottom: 20px;
+    width: 150px;
+    text-align: center;
+  }
+  pre {
+    font-size: 2rem;
+    margin: 0;
+  }
+</style>
+</head>
+<body>
+
+<h3>Latest DOGE/USDT Price</h3>
+<input id="basePrice" type="number" step="0.0001" placeholder="Enter base price">
+<pre id="output">Connecting...</pre>
+
+<script>
+let userBasePrice = null;
+const output = document.getElementById("output");
+const baseInput = document.getElementById("basePrice");
+
+baseInput.addEventListener("change", () => {
+    const val = parseFloat(baseInput.value);
+    if (!isNaN(val) && val > 0) {
+        userBasePrice = val;
+    } else {
+        userBasePrice = null;
+    }
+});
+
+const ws = new WebSocket("wss://wbs-api.mexc.com/ws");
+
+ws.onopen = () => {
+    console.log("Connected");
+
+    const sub = {
+        method: "SUBSCRIPTION",
+        params: ["spot@public.aggre.deals.v3.api.pb@100ms@DOGEUSDT"]
+    };
+
+    ws.send(JSON.stringify(sub));
+};
+
+ws.onmessage = async (event) => {
+    let raw;
+    if (event.data instanceof Blob) {
+        raw = await event.data.text();
+    } else {
+        raw = event.data;
+    }
+
+    const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
+    const prices = clean.match(/\d+\.\d+/g);
+
+    if (prices && prices.length > 0) {
+        const filtered = prices.filter(p => parseFloat(p) >= 0.1 && parseFloat(p) <= 5);
+        if (filtered.length > 0) {
+            const lastPrice = parseFloat(filtered[filtered.length - 1]);
+
+            // Batasi 4 angka di belakang koma
+            let displayText = lastPrice.toFixed(4);
+
+            if (userBasePrice !== null) {
+                const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
+                const sign = percent >= 0 ? "+" : "";
+                displayText += ` (${sign}${percent.toFixed(2)}%)`;
+
+                output.style.color = percent >= 0 ? "#00ff00" : "#ff5555";
+            } else {
+                output.style.color = "#ffffff";
+            }
+
+            output.textContent = displayText;
+            document.title = displayText;
+            console.log(displayText);
+        }
+    }
+};
+
+ws.onerror = (err) => {
+    console.error("Error:", err);
+};
+
+ws.onclose = () => {
+    console.log("Disconnected");
+};
+</script>
+
+</body>
+</html>
