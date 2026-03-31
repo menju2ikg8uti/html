@@ -24,7 +24,7 @@ input {
 </head>
 <body>
 
-<h2>DOGE/USD</h2>
+<h2>XRP/USD</h2>
 
 <p>
 Entry Price: 
@@ -50,7 +50,7 @@ function connectWS() {
         ws.send(JSON.stringify({
             method: "sub.ticker",
             param: {
-                symbol: "DOGE_USDT"
+                symbol: "XRP_USDT"
             }
         }));
     };
