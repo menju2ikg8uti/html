@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Connecting...</title>
+<style>
+  body {
+    background-color: #1e1e1e;
+    color: #ffffff;
+    font-family: monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: start;
+    height: 100vh;
+    margin: 0;
+    padding-top: 20px;
+  }
+  h3 {
+    margin-bottom: 10px;
+  }
+  input, button {
+    font-size: 1rem;
+    padding: 5px;
+    margin: 5px;
+    text-align: center;
+  }
+  pre {
+    font-size: 2rem;
+    margin: 10px;
+  }
+  .green { color:#00ff00; }
+  .red { color:#ff5555; }
+  .box {
+    border:1px solid #444;
+    padding:10px;
+    margin-top:10px;
+    width:300px;
+  }
+</style>
+</head>
+<body>
+
+<h3>CORE 1 - XRP/USDT Price</h3>
+<input id="basePrice" type="number" step="0.0001" placeholder="Base price">
+<pre id="output">Connecting...</pre>
+
+<h3>CORE 2 - Trading</h3>
+
+<div class="box">
+  <input id="apiKey" placeholder="API KEY"><br>
+  <input id="apiSecret" placeholder="API SECRET"><br>
+  <button onclick="syncData()">SYNC</button>
+</div>
+
+<div class="box">
+  <input id="buyAmount" type="number" placeholder="USDT Amount">
+  <button onclick="marketBuy()">BUY</button>
+  <br>
+  <input id="sellAmount" type="number" placeholder="XRP Amount">
+  <button onclick="marketSell()">SELL</button>
+</div>
+
+<div class="box">
+  <div>Balance:</div>
+  <div id="balance">-</div>
+</div>
+
+<div class="box">
+  <div>Trade History:</div>
+  <pre id="history" style="font-size:12px;height:150px;overflow:auto;"></pre>
+</div>
+
+<script>
+/* =========================
+   CORE 1 (WEBSOCKET PRICE)
+========================= */
+
+let userBasePrice = null;
+let lastPriceGlobal = null;
+
+const output = document.getElementById("output");
+const baseInput = document.getElementById("basePrice");
+
+baseInput.addEventListener("change", () => {
+    const val = parseFloat(baseInput.value);
+    userBasePrice = (!isNaN(val) && val > 0) ? val : null;
+});
+
+const ws = new WebSocket("wss://wbs-api.mexc.com/ws");
+
+ws.onopen = () => {
+    const sub = {
+        method: "SUBSCRIPTION",
+        params: ["spot@public.aggre.deals.v3.api.pb@100ms@XRPUSDT"]
+    };
+    ws.send(JSON.stringify(sub));
+};
+
+ws.onmessage = async (event) => {
+    let raw = event.data instanceof Blob ? await event.data.text() : event.data;
+
+    const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
+    const prices = clean.match(/\d+\.\d+/g);
+
+    if (prices && prices.length > 0) {
+        const filtered = prices.filter(p => parseFloat(p) >= 0.1 && parseFloat(p) <= 5);
+
+        if (filtered.length > 0) {
+            const lastPrice = parseFloat(filtered[filtered.length - 1]);
+            lastPriceGlobal = lastPrice;
+
+            let displayText = lastPrice.toFixed(4);
+
+            if (userBasePrice !== null) {
+                const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
+                const sign = percent >= 0 ? "+" : "";
+                displayText += ` (${sign}${percent.toFixed(2)}%)`;
+
+                output.className = percent >= 0 ? "green" : "red";
+            } else {
+                output.className = "";
+            }
+
+            output.textContent = displayText;
+            document.title = displayText;
+        }
+    }
+};
+
+/* =========================
+   CORE 2 (API TRADING)
+========================= */
+
+const API_BASE = "https://api.mexc.com";
+
+function getKeys() {
+    return {
+        key: document.getElementById("apiKey").value,
+        secret: document.getElementById("apiSecret").value
+    };
+}
+
+// SIGNATURE
+async function sign(query, secret) {
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+        "raw", enc.encode(secret),
+        { name: "HMAC", hash: "SHA-256" },
+        false, ["sign"]
+    );
+
+    const sig = await crypto.subtle.sign("HMAC", key, enc.encode(query));
+    return Array.from(new Uint8Array(sig))
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("");
+}
+
+// REQUEST SIGNED
+async function privateRequest(path, params = {}) {
+    const { key, secret } = getKeys();
+
+    const timestamp = Date.now();
+    const query = new URLSearchParams({ ...params, timestamp }).toString();
+
+    const signature = await sign(query, secret);
+
+    const url = `${API_BASE}${path}?${query}&signature=${signature}`;
+
+    const res = await fetch(url, {
+        headers: { "X-MEXC-APIKEY": key }
+    });
+
+    return res.json();
+}
+
+/* ===== SYNC ===== */
+
+async function syncData() {
+    const bal = await privateRequest("/api/v3/account");
+
+    let xrp = 0, usdt = 0;
+
+    bal.balances.forEach(b => {
+        if (b.asset === "XRP") xrp = b.free;
+        if (b.asset === "USDT") usdt = b.free;
+    });
+
+    document.getElementById("balance").textContent =
+        `USDT: ${usdt} | XRP: ${xrp}`;
+
+    const history = await privateRequest("/api/v3/myTrades", {
+        symbol: "XRPUSDT",
+        limit: 10
+    });
+
+    let txt = "";
+
+    history.forEach(t => {
+        const price = parseFloat(t.price);
+
+        let percentText = "";
+        if (userBasePrice !== null) {
+            const percent = ((price - userBasePrice) / userBasePrice) * 100;
+            const sign = percent >= 0 ? "+" : "";
+            percentText = ` (${sign}${percent.toFixed(2)}%)`;
+        }
+
+        txt += `${t.isBuyer ? "BUY" : "SELL"} @ ${price.toFixed(4)}${percentText}\n`;
+    });
+
+    document.getElementById("history").textContent = txt;
+}
+
+/* ===== BUY ===== */
+
+async function marketBuy() {
+    if (!lastPriceGlobal) return alert("No price");
+
+    const amount = document.getElementById("buyAmount").value;
+
+    const res = await privateRequest("/api/v3/order", {
+        symbol: "XRPUSDT",
+        side: "BUY",
+        type: "MARKET",
+        quoteOrderQty: amount
+    });
+
+    alert("BUY DONE");
+}
+
+/* ===== SELL ===== */
+
+async function marketSell() {
+    const amount = document.getElementById("sellAmount").value;
+
+    const res = await privateRequest("/api/v3/order", {
+        symbol: "XRPUSDT",
+        side: "SELL",
+        type: "MARKET",
+        quantity: amount
+    });
+
+    alert("SELL DONE");
+}
+</script>
+
+</body>
+</html>
