@@ -21,9 +21,15 @@
   input {
     font-size: 1rem;
     padding: 5px;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
     width: 150px;
     text-align: center;
+  }
+  button {
+    font-size: 0.9rem;
+    padding: 5px 10px;
+    margin-bottom: 20px;
+    cursor: pointer;
   }
   pre {
     font-size: 2rem;
@@ -35,12 +41,16 @@
 
 <h3>Latest XRP/USDT Price</h3>
 <input id="basePrice" type="number" step="0.0001" placeholder="Enter base price">
+<button id="reconnectBtn">Reconnect</button>
 <pre id="output">Connecting...</pre>
 
 <script>
 let userBasePrice = null;
+let ws = null;
+
 const output = document.getElementById("output");
 const baseInput = document.getElementById("basePrice");
+const reconnectBtn = document.getElementById("reconnectBtn");
 
 baseInput.addEventListener("change", () => {
     const val = parseFloat(baseInput.value);
@@ -51,62 +61,78 @@ baseInput.addEventListener("change", () => {
     }
 });
 
-const ws = new WebSocket("wss://wbs-api.mexc.com/ws");
+function connectWS() {
+    if (ws) {
+        ws.close();
+    }
 
-ws.onopen = () => {
-    console.log("Connected");
+    output.textContent = "Connecting...";
+    document.title = "Connecting...";
 
-    const sub = {
-        method: "SUBSCRIPTION",
-        params: ["spot@public.aggre.deals.v3.api.pb@100ms@XRPUSDT"]
+    ws = new WebSocket("wss://wbs-api.mexc.com/ws");
+
+    ws.onopen = () => {
+        console.log("Connected");
+
+        const sub = {
+            method: "SUBSCRIPTION",
+            params: ["spot@public.aggre.deals.v3.api.pb@100ms@XRPUSDT"]
+        };
+
+        ws.send(JSON.stringify(sub));
     };
 
-    ws.send(JSON.stringify(sub));
-};
-
-ws.onmessage = async (event) => {
-    let raw;
-    if (event.data instanceof Blob) {
-        raw = await event.data.text();
-    } else {
-        raw = event.data;
-    }
-
-    const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
-    const prices = clean.match(/\d+\.\d+/g);
-
-    if (prices && prices.length > 0) {
-        const filtered = prices.filter(p => parseFloat(p) >= 0.1 && parseFloat(p) <= 5);
-        if (filtered.length > 0) {
-            const lastPrice = parseFloat(filtered[filtered.length - 1]);
-
-            // Batasi 4 angka di belakang koma
-            let displayText = lastPrice.toFixed(4);
-
-            if (userBasePrice !== null) {
-                const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
-                const sign = percent >= 0 ? "+" : "";
-                displayText += ` (${sign}${percent.toFixed(2)}%)`;
-
-                output.style.color = percent >= 0 ? "#00ff00" : "#ff5555";
-            } else {
-                output.style.color = "#ffffff";
-            }
-
-            output.textContent = displayText;
-            document.title = displayText;
-            console.log(displayText);
+    ws.onmessage = async (event) => {
+        let raw;
+        if (event.data instanceof Blob) {
+            raw = await event.data.text();
+        } else {
+            raw = event.data;
         }
-    }
-};
 
-ws.onerror = (err) => {
-    console.error("Error:", err);
-};
+        const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
+        const prices = clean.match(/\d+\.\d+/g);
 
-ws.onclose = () => {
-    console.log("Disconnected");
-};
+        if (prices && prices.length > 0) {
+            const filtered = prices.filter(p => parseFloat(p) >= 0.1 && parseFloat(p) <= 5);
+            if (filtered.length > 0) {
+                const lastPrice = parseFloat(filtered[filtered.length - 1]);
+
+                let displayText = lastPrice.toFixed(4);
+
+                if (userBasePrice !== null) {
+                    const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
+                    const sign = percent >= 0 ? "+" : "";
+                    displayText += ` (${sign}${percent.toFixed(2)}%)`;
+
+                    output.style.color = percent >= 0 ? "#00ff00" : "#ff5555";
+                } else {
+                    output.style.color = "#ffffff";
+                }
+
+                output.textContent = displayText;
+                document.title = displayText;
+            }
+        }
+    };
+
+    ws.onerror = (err) => {
+        console.error("Error:", err);
+    };
+
+    ws.onclose = () => {
+        console.log("Disconnected");
+    };
+}
+
+// tombol reconnect manual
+reconnectBtn.addEventListener("click", () => {
+    console.log("Manual reconnect...");
+    connectWS();
+});
+
+// pertama kali jalan
+connectWS();
 </script>
 
 </body>
