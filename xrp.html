@@ -28,7 +28,7 @@
   button {
     font-size: 0.9rem;
     padding: 5px 10px;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
     cursor: pointer;
   }
   pre {
@@ -40,8 +40,11 @@
 <body>
 
 <h3>Latest XRP/USDT Price</h3>
+
 <input id="basePrice" type="number" step="0.0001" placeholder="Enter base price">
+<button id="confirmBtn">Confirm</button>
 <button id="reconnectBtn">Reconnect</button>
+
 <pre id="output">Connecting...</pre>
 
 <script>
@@ -51,13 +54,29 @@ let ws = null;
 const output = document.getElementById("output");
 const baseInput = document.getElementById("basePrice");
 const reconnectBtn = document.getElementById("reconnectBtn");
+const confirmBtn = document.getElementById("confirmBtn");
 
-baseInput.addEventListener("change", () => {
+// fungsi set base price
+function setBasePrice() {
     const val = parseFloat(baseInput.value);
     if (!isNaN(val) && val > 0) {
         userBasePrice = val;
+        console.log("Base price set:", userBasePrice);
     } else {
         userBasePrice = null;
+        console.log("Base price cleared");
+    }
+}
+
+// klik tombol confirm
+confirmBtn.addEventListener("click", () => {
+    setBasePrice();
+});
+
+// tekan ENTER di input
+baseInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+        setBasePrice();
     }
 });
 
