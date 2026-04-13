@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <title>Connecting...</title>
+
+<!-- favicon default -->
+<link id="favicon" rel="icon">
+
 <style>
   body {
     background-color: #1e1e1e;
@@ -55,6 +59,27 @@ const output = document.getElementById("output");
 const baseInput = document.getElementById("basePrice");
 const reconnectBtn = document.getElementById("reconnectBtn");
 const confirmBtn = document.getElementById("confirmBtn");
+const favicon = document.getElementById("favicon");
+
+// buat favicon bulat warna tertentu
+function createFavicon(color) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 64;
+
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(32, 32, 30, 0, Math.PI * 2);
+    ctx.fill();
+
+    return canvas.toDataURL("image/png");
+}
+
+// set favicon
+function setFavicon(color) {
+    favicon.href = createFavicon(color);
+}
 
 // fungsi set base price
 function setBasePrice() {
@@ -87,6 +112,7 @@ function connectWS() {
 
     output.textContent = "Connecting...";
     document.title = "Connecting...";
+    setFavicon("#888888");
 
     ws = new WebSocket("wss://wbs-api.mexc.com/ws");
 
@@ -124,9 +150,16 @@ function connectWS() {
                     const sign = percent >= 0 ? "+" : "";
                     displayText += ` (${sign}${percent.toFixed(2)}%)`;
 
-                    output.style.color = percent >= 0 ? "#00ff00" : "#ff5555";
+                    if (percent >= 0) {
+                        output.style.color = "#00ff00";
+                        setFavicon("#00ff00"); // hijau
+                    } else {
+                        output.style.color = "#ff5555";
+                        setFavicon("#ff5555"); // merah
+                    }
                 } else {
                     output.style.color = "#ffffff";
+                    setFavicon("#ffffff");
                 }
 
                 output.textContent = displayText;
