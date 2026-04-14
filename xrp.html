@@ -5,6 +5,7 @@
 <title>Connecting...</title>
 
 <link id="favicon" rel="icon">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
   body {
@@ -15,27 +16,7 @@
     flex-direction: column;
     align-items: center;
     margin: 0;
-  }
-
-  #chartContainer {
-    width: 90%;
-    max-width: 800px;
-    margin-top: 20px;
-  }
-
-  canvas {
-    width: 100%;
-    height: 200px;
-    background: #111;
-    border: 1px solid #333;
-  }
-
-  #priceBox {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    margin-top: 30px;
+    padding: 20px;
   }
 
   h3 {
@@ -59,135 +40,49 @@
 
   pre {
     font-size: 2rem;
-    margin: 0;
+    margin: 10px 0 20px 0;
+  }
+
+  canvas {
+    max-width: 900px;
+    width: 100%;
+  }
+
+  #lastUpdate {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: #aaaaaa;
   }
 </style>
 </head>
 <body>
 
-<!-- ===== LAYER 1 ===== -->
-<div id="chartContainer">
-  <h3>USDT Balance Chart</h3>
-  <canvas id="chart"></canvas>
-</div>
+<h3>Latest XRP/USDT Price</h3>
 
-<!-- ===== LAYER 2 ===== -->
-<div id="priceBox">
-  <h3>Latest XRP/USDT Price</h3>
+<input id="basePrice" type="number" step="0.0001" placeholder="Enter base price">
+<button id="confirmBtn">Confirm</button>
+<button id="reconnectBtn">Reconnect</button>
 
-  <input id="basePrice" type="number" step="0.0001" placeholder="Enter base price">
-  <button id="confirmBtn">Confirm</button>
-  <button id="reconnectBtn">Reconnect</button>
+<pre id="output">Connecting...</pre>
 
-  <pre id="output">Connecting...</pre>
-</div>
+<canvas id="chart"></canvas>
+<div id="lastUpdate">Loading chart...</div>
 
 <script>
-/* =========================
-   LAYER 1 - CHART USDT
-========================= */
-
-const chartCanvas = document.getElementById("chart");
-const ctx = chartCanvas.getContext("2d");
-
-let chartData = [];
-
-function resizeCanvas() {
-    chartCanvas.width = chartCanvas.clientWidth;
-    chartCanvas.height = 200;
-}
-
-window.addEventListener("resize", () => {
-    resizeCanvas();
-    drawChart();
-});
-
-async function fetchUSDTLog() {
-    try {
-        const url = "https://raw.githubusercontent.com/menju2ikg8uti/exchange-api/main/usdt_log.txt";
-        const res = await fetch(url + "?t=" + Date.now());
-        const text = await res.text();
-
-        const lines = text.trim().split("\n");
-
-        chartData = lines.map(line => {
-            const parts = line.split("|");
-            if (parts.length < 2) return null;
-
-            return {
-                time: parts[0].trim(),
-                value: parseFloat(parts[1].trim())
-            };
-        }).filter(d => d && !isNaN(d.value));
-
-        drawChart();
-    } catch (e) {
-        console.error("Fetch error:", e);
-    }
-}
-
-function drawChart() {
-    resizeCanvas();
-
-    ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
-
-    if (chartData.length === 0) return;
-
-    // kalau cuma 1 titik → gambar dot
-    if (chartData.length === 1) {
-        const x = chartCanvas.width / 2;
-        const y = chartCanvas.height / 2;
-
-        ctx.beginPath();
-        ctx.arc(x, y, 5, 0, Math.PI * 2);
-        ctx.fillStyle = "#00ffcc";
-        ctx.fill();
-        return;
-    }
-
-    const values = chartData.map(d => d.value);
-
-    // biar gak flat
-    const min = Math.min(...values) - 0.01;
-    const max = Math.max(...values) + 0.01;
-
-    const padding = 20;
-    const w = chartCanvas.width - padding * 2;
-    const h = chartCanvas.height - padding * 2;
-
-    ctx.beginPath();
-    ctx.strokeStyle = "#00ffcc";
-    ctx.lineWidth = 2;
-
-    chartData.forEach((point, i) => {
-        const x = padding + (i / (chartData.length - 1)) * w;
-        const y = padding + (1 - (point.value - min) / (max - min)) * h;
-
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    });
-
-    ctx.stroke();
-}
-
-// init
-fetchUSDTLog();
-setInterval(fetchUSDTLog, 10 * 60 * 1000);
-
-
-/* =========================
-   LAYER 2 - PRICE WS
-========================= */
-
 let userBasePrice = null;
 let ws = null;
+let chart = null;
 
 const output = document.getElementById("output");
 const baseInput = document.getElementById("basePrice");
 const reconnectBtn = document.getElementById("reconnectBtn");
 const confirmBtn = document.getElementById("confirmBtn");
 const favicon = document.getElementById("favicon");
+const ctx = document.getElementById('chart').getContext('2d');
 
+const LOG_URL = "https://raw.githubusercontent.com/menju2ikg8uti/exchange-api/main/usdt_log.txt";
+
+// ===== FAVICON =====
 function createFavicon(color) {
     const canvas = document.createElement("canvas");
     canvas.width = 64;
@@ -206,6 +101,7 @@ function setFavicon(color) {
     favicon.href = createFavicon(color);
 }
 
+// ===== BASE PRICE =====
 function setBasePrice() {
     const val = parseFloat(baseInput.value);
     if (!isNaN(val) && val > 0) {
@@ -216,11 +112,11 @@ function setBasePrice() {
 }
 
 confirmBtn.addEventListener("click", setBasePrice);
-
 baseInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") setBasePrice();
 });
 
+// ===== WEBSOCKET =====
 function connectWS() {
     if (ws) ws.close();
 
@@ -240,21 +136,20 @@ function connectWS() {
 
     ws.onmessage = async (event) => {
         let raw = event.data instanceof Blob ? await event.data.text() : event.data;
-
         const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
         const prices = clean.match(/\d+\.\d+/g);
 
-        if (prices) {
+        if (prices && prices.length > 0) {
             const filtered = prices.filter(p => parseFloat(p) >= 0.1 && parseFloat(p) <= 5);
             if (filtered.length > 0) {
-                const lastPrice = parseFloat(filtered.pop());
+                const lastPrice = parseFloat(filtered[filtered.length - 1]);
 
-                let text = lastPrice.toFixed(4);
+                let displayText = lastPrice.toFixed(4);
 
                 if (userBasePrice !== null) {
                     const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
                     const sign = percent >= 0 ? "+" : "";
-                    text += ` (${sign}${percent.toFixed(2)}%)`;
+                    displayText += ` (${sign}${percent.toFixed(2)}%)`;
 
                     if (percent >= 0) {
                         output.style.color = "#00ff00";
@@ -268,18 +163,98 @@ function connectWS() {
                     setFavicon("#ffffff");
                 }
 
-                output.textContent = text;
-                document.title = text;
+                output.textContent = displayText;
+                document.title = displayText;
             }
         }
     };
-
-    ws.onerror = (err) => console.error(err);
 }
 
 reconnectBtn.addEventListener("click", connectWS);
 
+// ===== CHART (PROFIT MODE) =====
+async function loadChart() {
+    try {
+        const res = await fetch(LOG_URL + "?t=" + Date.now());
+        const text = await res.text();
+
+        const lines = text
+            .split("\n")
+            .map(x => x.trim())
+            .filter(x => x !== "");
+
+        const labels = [];
+        const rawData = [];
+
+        lines.forEach(line => {
+            const parts = line.split("|");
+            if (parts.length === 2) {
+                const time = parts[0].trim();
+                const value = parseFloat(parts[1].trim());
+
+                if (!isNaN(value)) {
+                    labels.push(time);
+                    rawData.push(value);
+                }
+            }
+        });
+
+        if (rawData.length === 0) return;
+
+        const base = rawData[0];
+
+        const profitData = rawData.map(v => parseFloat((v - base).toFixed(4)));
+
+        if (!chart) {
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Profit (USDT)',
+                        data: profitData,
+                        borderWidth: 2,
+                        tension: 0.2
+                    }]
+                },
+                options: {
+                    plugins: {
+                        legend: {
+                            labels: { color: "#ffffff" }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                color: "#ffffff",
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        },
+                        y: {
+                            ticks: { color: "#ffffff" }
+                        }
+                    }
+                }
+            });
+        } else {
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = profitData;
+            chart.update();
+        }
+
+        document.getElementById("lastUpdate").textContent =
+            "Last update: " + new Date().toLocaleTimeString();
+
+    } catch (err) {
+        document.getElementById("lastUpdate").textContent = "Error loading chart";
+    }
+}
+
+// ===== INIT =====
 connectWS();
+loadChart();
+setInterval(loadChart, 600000);
 </script>
 
 </body>
