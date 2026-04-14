@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <title>Connecting...</title>
 
-<!-- favicon default -->
 <link id="favicon" rel="icon">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
   body {
@@ -15,13 +15,14 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    height: 100vh;
     margin: 0;
+    padding: 20px;
   }
+
   h3 {
     margin-bottom: 10px;
   }
+
   input {
     font-size: 1rem;
     padding: 5px;
@@ -29,15 +30,28 @@
     width: 150px;
     text-align: center;
   }
+
   button {
     font-size: 0.9rem;
     padding: 5px 10px;
     margin-bottom: 10px;
     cursor: pointer;
   }
+
   pre {
     font-size: 2rem;
-    margin: 0;
+    margin: 10px 0 20px 0;
+  }
+
+  canvas {
+    max-width: 900px;
+    width: 100%;
+  }
+
+  #lastUpdate {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: #aaaaaa;
   }
 </style>
 </head>
@@ -51,17 +65,24 @@
 
 <pre id="output">Connecting...</pre>
 
+<canvas id="chart"></canvas>
+<div id="lastUpdate">Loading chart...</div>
+
 <script>
 let userBasePrice = null;
 let ws = null;
+let chart = null;
 
 const output = document.getElementById("output");
 const baseInput = document.getElementById("basePrice");
 const reconnectBtn = document.getElementById("reconnectBtn");
 const confirmBtn = document.getElementById("confirmBtn");
 const favicon = document.getElementById("favicon");
+const ctx = document.getElementById('chart').getContext('2d');
 
-// buat favicon bulat warna tertentu
+const LOG_URL = "https://raw.githubusercontent.com/menju2ikg8uti/exchange-api/main/usdt_log.txt";
+
+// ===== FAVICON =====
 function createFavicon(color) {
     const canvas = document.createElement("canvas");
     canvas.width = 64;
@@ -76,39 +97,28 @@ function createFavicon(color) {
     return canvas.toDataURL("image/png");
 }
 
-// set favicon
 function setFavicon(color) {
     favicon.href = createFavicon(color);
 }
 
-// fungsi set base price
+// ===== BASE PRICE =====
 function setBasePrice() {
     const val = parseFloat(baseInput.value);
     if (!isNaN(val) && val > 0) {
         userBasePrice = val;
-        console.log("Base price set:", userBasePrice);
     } else {
         userBasePrice = null;
-        console.log("Base price cleared");
     }
 }
 
-// klik tombol confirm
-confirmBtn.addEventListener("click", () => {
-    setBasePrice();
-});
-
-// tekan ENTER di input
+confirmBtn.addEventListener("click", setBasePrice);
 baseInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-        setBasePrice();
-    }
+    if (e.key === "Enter") setBasePrice();
 });
 
+// ===== WEBSOCKET =====
 function connectWS() {
-    if (ws) {
-        ws.close();
-    }
+    if (ws) ws.close();
 
     output.textContent = "Connecting...";
     document.title = "Connecting...";
@@ -117,24 +127,15 @@ function connectWS() {
     ws = new WebSocket("wss://wbs-api.mexc.com/ws");
 
     ws.onopen = () => {
-        console.log("Connected");
-
         const sub = {
             method: "SUBSCRIPTION",
             params: ["spot@public.aggre.deals.v3.api.pb@100ms@XRPUSDT"]
         };
-
         ws.send(JSON.stringify(sub));
     };
 
     ws.onmessage = async (event) => {
-        let raw;
-        if (event.data instanceof Blob) {
-            raw = await event.data.text();
-        } else {
-            raw = event.data;
-        }
-
+        let raw = event.data instanceof Blob ? await event.data.text() : event.data;
         const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
         const prices = clean.match(/\d+\.\d+/g);
 
@@ -152,10 +153,10 @@ function connectWS() {
 
                     if (percent >= 0) {
                         output.style.color = "#00ff00";
-                        setFavicon("#00ff00"); // hijau
+                        setFavicon("#00ff00");
                     } else {
                         output.style.color = "#ff5555";
-                        setFavicon("#ff5555"); // merah
+                        setFavicon("#ff5555");
                     }
                 } else {
                     output.style.color = "#ffffff";
@@ -168,23 +169,68 @@ function connectWS() {
         }
     };
 
-    ws.onerror = (err) => {
-        console.error("Error:", err);
-    };
-
-    ws.onclose = () => {
-        console.log("Disconnected");
-    };
+    ws.onclose = () => console.log("Disconnected");
+    ws.onerror = (err) => console.error("Error:", err);
 }
 
-// tombol reconnect manual
-reconnectBtn.addEventListener("click", () => {
-    console.log("Manual reconnect...");
-    connectWS();
-});
+reconnectBtn.addEventListener("click", connectWS);
 
-// pertama kali jalan
+// ===== CHART =====
+async function loadChart() {
+    try {
+        const res = await fetch(LOG_URL + "?t=" + Date.now());
+        const text = await res.text();
+
+        const data = text
+            .split("\n")
+            .map(x => x.trim())
+            .filter(x => x !== "")
+            .map(x => parseFloat(x));
+
+        const labels = data.map((_, i) => i + 1);
+
+        if (!chart) {
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'USDT Balance',
+                        data: data,
+                        borderWidth: 2,
+                        tension: 0.2
+                    }]
+                },
+                options: {
+                    plugins: {
+                        legend: {
+                            labels: { color: "#ffffff" }
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { color: "#ffffff" } },
+                        y: { ticks: { color: "#ffffff" } }
+                    }
+                }
+            });
+        } else {
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = data;
+            chart.update();
+        }
+
+        document.getElementById("lastUpdate").textContent =
+            "Last update: " + new Date().toLocaleTimeString();
+
+    } catch (err) {
+        document.getElementById("lastUpdate").textContent = "Error loading chart";
+    }
+}
+
+// ===== INIT =====
 connectWS();
+loadChart();
+setInterval(loadChart, 600000);
 </script>
 
 </body>
