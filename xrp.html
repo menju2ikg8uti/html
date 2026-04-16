@@ -172,7 +172,35 @@ function connectWS() {
 
 reconnectBtn.addEventListener("click", connectWS);
 
-// ===== CHART (PROFIT MODE) =====
+// ===== FIND BASE (08:00 LOGIC) =====
+function getBaseIndex(labels) {
+    let baseIndex = -1;
+
+    // cari jam 08:00 exact
+    for (let i = 0; i < labels.length; i++) {
+        if (labels[i].includes("08:00")) {
+            baseIndex = i;
+            break;
+        }
+    }
+
+    // kalau tidak ada → cari terakhir sebelum 08:00
+    if (baseIndex === -1) {
+        for (let i = 0; i < labels.length; i++) {
+            const timePart = labels[i].split(" ")[1];
+            if (timePart && timePart < "08:00") {
+                baseIndex = i;
+            }
+        }
+    }
+
+    // fallback ke index 0
+    if (baseIndex === -1) baseIndex = 0;
+
+    return baseIndex;
+}
+
+// ===== CHART =====
 async function loadChart() {
     try {
         const res = await fetch(LOG_URL + "?t=" + Date.now());
@@ -201,7 +229,8 @@ async function loadChart() {
 
         if (rawData.length === 0) return;
 
-        const base = rawData[0];
+        const baseIndex = getBaseIndex(labels);
+        const base = rawData[baseIndex];
 
         const profitData = rawData.map(v => parseFloat((v - base).toFixed(4)));
 
