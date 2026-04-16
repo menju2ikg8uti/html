@@ -40,7 +40,13 @@
 
   pre {
     font-size: 2rem;
-    margin: 10px 0 20px 0;
+    margin: 10px 0 5px 0;
+  }
+
+  .sub-price {
+    font-size: 1rem;
+    margin: 2px 0;
+    color: #aaaaaa;
   }
 
   canvas {
@@ -64,6 +70,10 @@
 <button id="reconnectBtn">Reconnect</button>
 
 <pre id="output">Connecting...</pre>
+
+<div id="binance" class="sub-price">Binance: ...</div>
+<div id="kraken" class="sub-price">Kraken: ...</div>
+<div id="coincap" class="sub-price">CoinCap: ...</div>
 
 <canvas id="chart"></canvas>
 <div id="lastUpdate">Loading chart...</div>
@@ -116,7 +126,7 @@ baseInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") setBasePrice();
 });
 
-// ===== WEBSOCKET =====
+// ===== MEXC (MAIN) =====
 function connectWS() {
     if (ws) ws.close();
 
@@ -127,11 +137,10 @@ function connectWS() {
     ws = new WebSocket("wss://wbs-api.mexc.com/ws");
 
     ws.onopen = () => {
-        const sub = {
+        ws.send(JSON.stringify({
             method: "SUBSCRIPTION",
             params: ["spot@public.aggre.deals.v3.api.pb@100ms@XRPUSDT"]
-        };
-        ws.send(JSON.stringify(sub));
+        }));
     };
 
     ws.onmessage = async (event) => {
@@ -163,7 +172,7 @@ function connectWS() {
                     setFavicon("#ffffff");
                 }
 
-                output.textContent = displayText;
+                output.textContent = displayText + " (MEXC)";
                 document.title = displayText;
             }
         }
@@ -172,19 +181,56 @@ function connectWS() {
 
 reconnectBtn.addEventListener("click", connectWS);
 
-// ===== FIND BASE (08:00 LOGIC) =====
+// ===== BINANCE =====
+(function(){
+  let ws = new WebSocket("wss://stream.binance.com:9443/ws/xrpusdt@trade");
+  ws.onmessage = (e) => {
+    let data = JSON.parse(e.data);
+    let price = parseFloat(data.p).toFixed(4);
+    document.getElementById("binance").innerText = price + " (Binance)";
+  };
+})();
+
+// ===== KRAKEN =====
+(function(){
+  let ws = new WebSocket("wss://ws.kraken.com/");
+  ws.onopen = () => {
+    ws.send(JSON.stringify({
+      event: "subscribe",
+      pair: ["XRP/USD"],
+      subscription: { name: "ticker" }
+    }));
+  };
+  ws.onmessage = (e) => {
+    let data = JSON.parse(e.data);
+    if (Array.isArray(data) && data[1] && data[1].c) {
+      let price = parseFloat(data[1].c[0]).toFixed(4);
+      document.getElementById("kraken").innerText = price + " (Kraken)";
+    }
+  };
+})();
+
+// ===== COINCAP =====
+(function(){
+  let ws = new WebSocket("wss://ws.coincap.io/prices?assets=xrp");
+  ws.onmessage = (e) => {
+    let data = JSON.parse(e.data);
+    if (data.xrp) {
+      let price = parseFloat(data.xrp).toFixed(4);
+      document.getElementById("coincap").innerText = price + " (CoinCap)";
+    }
+  };
+})();
+
+// ===== CHART =====
 function getBaseIndex(labels) {
     let baseIndex = -1;
-
-    // cari jam 08:00 exact
     for (let i = 0; i < labels.length; i++) {
         if (labels[i].includes("08:00")) {
             baseIndex = i;
             break;
         }
     }
-
-    // kalau tidak ada → cari terakhir sebelum 08:00
     if (baseIndex === -1) {
         for (let i = 0; i < labels.length; i++) {
             const timePart = labels[i].split(" ")[1];
@@ -193,23 +239,16 @@ function getBaseIndex(labels) {
             }
         }
     }
-
-    // fallback ke index 0
     if (baseIndex === -1) baseIndex = 0;
-
     return baseIndex;
 }
 
-// ===== CHART =====
 async function loadChart() {
     try {
         const res = await fetch(LOG_URL + "?t=" + Date.now());
         const text = await res.text();
 
-        const lines = text
-            .split("\n")
-            .map(x => x.trim())
-            .filter(x => x !== "");
+        const lines = text.split("\n").map(x => x.trim()).filter(x => x !== "");
 
         const labels = [];
         const rawData = [];
@@ -219,7 +258,6 @@ async function loadChart() {
             if (parts.length === 2) {
                 const time = parts[0].trim();
                 const value = parseFloat(parts[1].trim());
-
                 if (!isNaN(value)) {
                     labels.push(time);
                     rawData.push(value);
@@ -245,25 +283,6 @@ async function loadChart() {
                         borderWidth: 2,
                         tension: 0.2
                     }]
-                },
-                options: {
-                    plugins: {
-                        legend: {
-                            labels: { color: "#ffffff" }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            ticks: {
-                                color: "#ffffff",
-                                maxRotation: 45,
-                                minRotation: 45
-                            }
-                        },
-                        y: {
-                            ticks: { color: "#ffffff" }
-                        }
-                    }
                 }
             });
         } else {
@@ -275,7 +294,7 @@ async function loadChart() {
         document.getElementById("lastUpdate").textContent =
             "Last update: " + new Date().toLocaleTimeString();
 
-    } catch (err) {
+    } catch {
         document.getElementById("lastUpdate").textContent = "Error loading chart";
     }
 }
