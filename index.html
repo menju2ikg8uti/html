@@ -43,12 +43,17 @@ function connectMEXC() {
 
         wsMEXC.send(JSON.stringify({
             method: "SUBSCRIPTION",
-            params: ["spot@public.deals.v3.api@XRPUSDT"]
+            params: ["spot@public.aggre.deals.v3.api.pb@10ms@XRPUSDT"]
         }));
     };
 
     wsMEXC.onmessage = (event) => {
-        write(event.data);
+        if (event.data instanceof Blob) {
+            const text = await event.data.text();
+            write("BLOB (text attempt): " + text);
+        } else {
+            write(event.data);
+        }
     };
 
     wsMEXC.onerror = (err) => {
