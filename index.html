@@ -1,108 +1,165 @@
 <!DOCTYPE html>
-<html lang="id">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>price</title>
+<title>Connecting...</title>
+
+<link id="favicon" rel="icon">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 body {
-    font-family: Arial;
-    text-align: center;
-    background: #0f172a;
-    color: white;
+    background-color: #1e1e1e;
+    color: #ffffff;
+    font-family: monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0;
+    padding: 20px;
 }
-input {
-    padding: 5px;
-    font-size: 16px;
-    text-align: center;
+
+#price {
+    font-size: 48px;
+    margin: 10px;
 }
+
 #percent {
-    font-size: 20px;
-    margin-top: 10px;
+    font-size: 24px;
+    margin-bottom: 20px;
+}
+
+canvas {
+    max-width: 800px;
+    width: 100%;
 }
 </style>
 </head>
+
 <body>
 
-<h2>XRP/USD</h2>
-
-<p>
-Entry Price: 
-<input type="number" id="entry" placeholder="input harga" step="0.0001">
-</p>
-
-<p id="price">(connecting...)</p>
-<p id="percent">-</p>
-<p id="status"></p>
+<div id="price">-</div>
+<div id="percent">-</div>
+<canvas id="chart"></canvas>
 
 <script>
-let ws;
-let reconnectDelay = 5000;
-const maxDelay = 30000;
+let wsMEXC;
+let lastPrice = null;
+let basePrice = null;
 
-function connectWS() {
-    ws = new WebSocket("wss://contract.mexc.com/edge");
+const priceEl = document.getElementById("price");
+const percentEl = document.getElementById("percent");
 
-    ws.onopen = () => {
-        document.getElementById("status").innerText = "Connected";
-        reconnectDelay = 5000;
+function setFavicon(color) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext("2d");
 
-        ws.send(JSON.stringify({
-            method: "sub.ticker",
-            param: {
-                symbol: "XRP_USDT"
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, 32, 32);
+
+    document.getElementById("favicon").href = canvas.toDataURL("image/png");
+}
+
+// Chart setup
+const ctx = document.getElementById("chart").getContext("2d");
+const chart = new Chart(ctx, {
+    type: "line",
+    data: {
+        labels: [],
+        datasets: [{
+            label: "XRP/USDT",
+            data: [],
+            borderColor: "#00ffcc",
+            borderWidth: 2,
+            pointRadius: 0
+        }]
+    },
+    options: {
+        animation: false,
+        responsive: true,
+        scales: {
+            x: {
+                ticks: { display: false }
             }
+        }
+    }
+});
+
+function connectMEXC() {
+    if (wsMEXC) wsMEXC.close();
+
+    document.title = "Connecting...";
+    setFavicon("#888888");
+
+    wsMEXC = new WebSocket("wss://wbs-api.mexc.com/ws");
+
+    wsMEXC.onopen = () => {
+        wsMEXC.send(JSON.stringify({
+            method: "SUBSCRIPTION",
+            params: ["spot@public.aggre.deals.v3.api.pb@10ms@XRPUSDT"]
         }));
     };
 
-    ws.onmessage = (msg) => {
-        const data = JSON.parse(msg.data);
+    wsMEXC.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
 
-        if (data.data && data.data.lastPrice) {
-            const price = parseFloat(data.data.lastPrice);
-            const entry = parseFloat(document.getElementById("entry").value);
+            if (!data.d || !data.d.deals) return;
 
-            document.getElementById("price").innerText = "(" + price + ")";
+            const price = parseFloat(data.d.deals[0].p);
+            if (!price) return;
 
-            if (!isNaN(entry) && entry > 0) {
-                const percent = ((price - entry) / entry) * 100;
-                const el = document.getElementById("percent");
+            if (!basePrice) basePrice = price;
 
-                const percentText = percent.toFixed(2);
+            // Update UI
+            priceEl.textContent = price.toFixed(4);
+            document.title = price.toFixed(4);
 
-                el.innerText = percentText + " %";
+            const percent = ((price - basePrice) / basePrice) * 100;
+            percentEl.textContent = percent.toFixed(4) + "%";
 
-                if (percent > 0) {
-                    el.style.color = "lime";
-                } else if (percent < 0) {
-                    el.style.color = "red";
-                } else {
-                    el.style.color = "white";
+            // Color logic
+            if (lastPrice !== null) {
+                if (price > lastPrice) {
+                    priceEl.style.color = "#00ff00";
+                    setFavicon("#00ff00");
+                } else if (price < lastPrice) {
+                    priceEl.style.color = "#ff0000";
+                    setFavicon("#ff0000");
                 }
-
-                // update title (price + percent)
-                document.title = price + " (" + percentText + "%)";
-            } else {
-                // kalau belum ada entry
-                document.title = price;
             }
-        }
+
+            lastPrice = price;
+
+            // Update chart
+            const time = new Date().toLocaleTimeString();
+
+            chart.data.labels.push(time);
+            chart.data.datasets[0].data.push(price);
+
+            if (chart.data.labels.length > 100) {
+                chart.data.labels.shift();
+                chart.data.datasets[0].data.shift();
+            }
+
+            chart.update();
+
+        } catch (e) {}
     };
 
-    ws.onerror = () => {
-        document.getElementById("status").innerText = "Error";
-        ws.close();
+    wsMEXC.onclose = () => {
+        setTimeout(connectMEXC, 2000);
     };
 
-    ws.onclose = () => {
-        document.getElementById("status").innerText = "Reconnect in " + (reconnectDelay/1000) + "s";
-
-        setTimeout(connectWS, reconnectDelay);
-        reconnectDelay = Math.min(reconnectDelay * 2, maxDelay);
+    wsMEXC.onerror = () => {
+        wsMEXC.close();
     };
 }
 
-connectWS();
+connectMEXC();
 </script>
 
 </body>
