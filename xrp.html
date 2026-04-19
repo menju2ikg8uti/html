@@ -59,14 +59,8 @@
 
 <h3>Latest XRP/USDT Price</h3>
 
-<input id="basePrice" type="number" step="0.0001" placeholder="Base price">
+<input id="basePrice" type="number" step="0.0001" placeholder="Enter base price">
 <button id="confirmBtn">Confirm</button>
-
-<!-- ===== LAYER 3 (TOP / BOTTOM) ===== -->
-<input id="topPrice" type="number" step="0.0001" placeholder="Top price">
-<input id="bottomPrice" type="number" step="0.0001" placeholder="Bottom price">
-<button id="confirmRangeBtn">Confirm Range</button>
-
 <button id="reconnectBtn">Reconnect</button>
 
 <pre id="output">Connecting...</pre>
@@ -76,9 +70,6 @@
 
 <script>
 let userBasePrice = null;
-let topPrice = null;
-let bottomPrice = null;
-
 let ws = null;
 let chart = null;
 
@@ -88,11 +79,6 @@ const reconnectBtn = document.getElementById("reconnectBtn");
 const confirmBtn = document.getElementById("confirmBtn");
 const favicon = document.getElementById("favicon");
 const ctx = document.getElementById('chart').getContext('2d');
-
-// layer 3
-const topInput = document.getElementById("topPrice");
-const bottomInput = document.getElementById("bottomPrice");
-const confirmRangeBtn = document.getElementById("confirmRangeBtn");
 
 const LOG_URL = "https://raw.githubusercontent.com/menju2ikg8uti/exchange-api/main/usdt_log.txt";
 
@@ -123,29 +109,12 @@ function setBasePrice() {
     } else {
         userBasePrice = null;
     }
-
-    // reset symbol saat confirm
-    document.title = "Reset...";
 }
 
 confirmBtn.addEventListener("click", setBasePrice);
 baseInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") setBasePrice();
 });
-
-// ===== LAYER 3 LOGIC =====
-function setRange() {
-    const topVal = parseFloat(topInput.value);
-    const bottomVal = parseFloat(bottomInput.value);
-
-    topPrice = (!isNaN(topVal)) ? topVal : null;
-    bottomPrice = (!isNaN(bottomVal)) ? bottomVal : null;
-
-    // reset symbol
-    document.title = "Range Set";
-}
-
-confirmRangeBtn.addEventListener("click", setRange);
 
 // ===== WEBSOCKET =====
 function connectWS() {
@@ -176,9 +145,7 @@ function connectWS() {
                 const lastPrice = parseFloat(filtered[filtered.length - 1]);
 
                 let displayText = lastPrice.toFixed(4);
-                let titleSymbol = "";
 
-                // ===== BASE PRICE (layer 1 tetap) =====
                 if (userBasePrice !== null) {
                     const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
                     const sign = percent >= 0 ? "+" : "";
@@ -196,15 +163,8 @@ function connectWS() {
                     setFavicon("#ffffff");
                 }
 
-                // ===== LAYER 3 (TOP / BOTTOM SYMBOL) =====
-                if (topPrice !== null && lastPrice > topPrice) {
-                    titleSymbol = " ⬆️";
-                } else if (bottomPrice !== null && lastPrice < bottomPrice) {
-                    titleSymbol = " ⬇️";
-                }
-
                 output.textContent = displayText;
-                document.title = displayText + titleSymbol;
+                document.title = displayText;
             }
         }
     };
@@ -212,13 +172,16 @@ function connectWS() {
 
 reconnectBtn.addEventListener("click", connectWS);
 
-// ===== CHART =====
+// ===== CHART (PROFIT MODE) =====
 async function loadChart() {
     try {
         const res = await fetch(LOG_URL + "?t=" + Date.now());
         const text = await res.text();
 
-        const lines = text.split("\n").map(x => x.trim()).filter(x => x !== "");
+        const lines = text
+            .split("\n")
+            .map(x => x.trim())
+            .filter(x => x !== "");
 
         const labels = [];
         const rawData = [];
@@ -239,6 +202,7 @@ async function loadChart() {
         if (rawData.length === 0) return;
 
         const base = rawData[0];
+
         const profitData = rawData.map(v => parseFloat((v - base).toFixed(4)));
 
         if (!chart) {
