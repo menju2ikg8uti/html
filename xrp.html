@@ -19,10 +19,6 @@
     padding: 20px;
   }
 
-  h3 {
-    margin-bottom: 10px;
-  }
-
   input {
     font-size: 1rem;
     padding: 5px;
@@ -53,61 +49,45 @@
     max-width: 900px;
     width: 100%;
   }
-
-  #lastUpdate {
-    margin-top: 10px;
-    font-size: 0.9rem;
-    color: #aaaaaa;
-  }
 </style>
 </head>
 <body>
 
-<h3>Latest XRP/USDT Price</h3>
+<h3>XRP/USDT</h3>
 
-<input id="basePrice" type="number" step="0.0001" placeholder="Base price">
-<input id="targetUp" type="number" step="0.0001" placeholder="Target atas">
-<input id="targetDown" type="number" step="0.0001" placeholder="Target bawah">
+<input id="basePrice" type="number" step="0.0001" placeholder="Base">
+<input id="targetUp" type="number" step="0.0001" placeholder="Target Atas">
+<input id="targetDown" type="number" step="0.0001" placeholder="Target Bawah">
 
 <button id="confirmBtn">Confirm</button>
 <button id="reconnectBtn">Reconnect</button>
 
 <pre id="output">Connecting...</pre>
-
 <div id="binance" class="sub-price">Binance: ...</div>
-
-<canvas id="chart"></canvas>
-<div id="lastUpdate">Loading chart...</div>
 
 <script>
 let userBasePrice = null;
 let targetUp = null;
 let targetDown = null;
+let hitState = null;
 
 let mexcWS = null;
 let binanceWS = null;
-
-let chart = null;
 
 const output = document.getElementById("output");
 const baseInput = document.getElementById("basePrice");
 const upInput = document.getElementById("targetUp");
 const downInput = document.getElementById("targetDown");
 
-const reconnectBtn = document.getElementById("reconnectBtn");
-const confirmBtn = document.getElementById("confirmBtn");
 const favicon = document.getElementById("favicon");
-const ctx = document.getElementById('chart').getContext('2d');
-
-const LOG_URL = "https://raw.githubusercontent.com/menju2ikg8uti/exchange-api/main/usdt_log.txt";
 
 // ===== FAVICON =====
 function createFavicon(color) {
     const canvas = document.createElement("canvas");
     canvas.width = 64;
     canvas.height = 64;
-
     const ctx = canvas.getContext("2d");
+
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(32, 32, 30, 0, Math.PI * 2);
@@ -122,47 +102,43 @@ function setFavicon(color) {
 
 // ===== INPUT =====
 function setInputs() {
-    const base = parseFloat(baseInput.value);
-    const up = parseFloat(upInput.value);
-    const down = parseFloat(downInput.value);
+    userBasePrice = parseFloat(baseInput.value) || null;
+    targetUp = parseFloat(upInput.value) || null;
+    targetDown = parseFloat(downInput.value) || null;
 
-    userBasePrice = (!isNaN(base) && base > 0) ? base : null;
-    targetUp = (!isNaN(up)) ? up : null;
-    targetDown = (!isNaN(down)) ? down : null;
+    hitState = null; // reset trigger
 }
 
-confirmBtn.addEventListener("click", setInputs);
+document.getElementById("confirmBtn").onclick = setInputs;
 
 // ===== ICON LOGIC =====
 function updateFavicon(price) {
-    // ===== PRIORITAS 1: TARGET =====
-    if (targetUp !== null && price >= targetUp) {
-        setFavicon("#00ff00"); // HIJAU (trigger atas)
+    // trigger lock
+    if (hitState === null) {
+        if (targetUp && price >= targetUp) hitState = "up";
+        if (targetDown && price <= targetDown) hitState = "down";
+    }
+
+    if (hitState === "up") {
+        setFavicon("#00ff00");
         return;
     }
 
-    if (targetDown !== null && price <= targetDown) {
-        setFavicon("#ff0000"); // MERAH (trigger bawah)
+    if (hitState === "down") {
+        setFavicon("#ff0000");
         return;
     }
 
-    // ===== PRIORITAS 2: PERSEN =====
-    if (userBasePrice !== null) {
-        const percent = (price - userBasePrice) / userBasePrice;
-
-        if (percent >= 0) {
-            setFavicon("#00aa00"); // hijau persen (dibedakan sedikit)
-        } else {
-            setFavicon("#aa0000"); // merah persen
-        }
+    if (userBasePrice) {
+        let percent = (price - userBasePrice) / userBasePrice;
+        setFavicon(percent >= 0 ? "#00aa00" : "#aa0000");
         return;
     }
 
-    // ===== DEFAULT =====
-    setFavicon("#000000"); // hitam
+    setFavicon("#000000");
 }
 
-// ===== MEXC =====
+// ===== MEXC (STABLE PARSE) =====
 function connectMEXC() {
     if (mexcWS) mexcWS.close();
 
@@ -176,44 +152,37 @@ function connectMEXC() {
     };
 
     mexcWS.onmessage = async (event) => {
-        try {
-            let raw = event.data instanceof Blob ? await event.data.text() : event.data;
+        let raw = event.data instanceof Blob ? await event.data.text() : event.data;
 
-            const data = JSON.parse(raw);
+        // ambil semua angka desimal
+        const matches = raw.match(/\d+\.\d+/g);
+        if (!matches) return;
 
-            // pastikan struktur benar
-            if (data && data.d && data.d.deals && data.d.deals.length > 0) {
+        // filter range harga XRP
+        const filtered = matches
+            .map(v => parseFloat(v))
+            .filter(v => v > 0.1 && v < 5);
 
-                // ambil deal terakhir
-                const lastDeal = data.d.deals[data.d.deals.length - 1];
+        if (filtered.length === 0) return;
 
-                const lastPrice = parseFloat(lastDeal.p);
+        const price = filtered[filtered.length - 1];
 
-                if (!isNaN(lastPrice)) {
+        let text = price.toFixed(4);
 
-                    let displayText = lastPrice.toFixed(4);
+        if (userBasePrice) {
+            const percent = ((price - userBasePrice) / userBasePrice) * 100;
+            const sign = percent >= 0 ? "+" : "";
+            text += ` (${sign}${percent.toFixed(2)}%)`;
 
-                    if (userBasePrice !== null) {
-                        const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
-                        const sign = percent >= 0 ? "+" : "";
-                        displayText += ` (${sign}${percent.toFixed(2)}%)`;
-
-                        output.style.color = percent >= 0 ? "#00ff00" : "#ff5555";
-                    } else {
-                        output.style.color = "#ffffff";
-                    }
-
-                    output.textContent = displayText + " (MEXC)";
-                    document.title = displayText;
-
-                    updateFavicon(lastPrice);
-                }
-            }
-
-        } catch (err) {
-            // kalau ada data aneh, skip saja
-            console.log("Parse error:", err);
+            output.style.color = percent >= 0 ? "#00ff00" : "#ff5555";
+        } else {
+            output.style.color = "#ffffff";
         }
+
+        output.textContent = text + " (MEXC)";
+        document.title = text;
+
+        updateFavicon(price);
     };
 }
 
@@ -230,73 +199,16 @@ function connectBinance() {
     };
 }
 
-// ===== RECONNECT ALL =====
+// ===== RECONNECT =====
 function reconnectAll() {
     connectMEXC();
     connectBinance();
 }
 
-reconnectBtn.addEventListener("click", reconnectAll);
-
-// ===== CHART =====
-async function loadChart() {
-    try {
-        const res = await fetch(LOG_URL + "?t=" + Date.now());
-        const text = await res.text();
-
-        const lines = text.split("\n").map(x => x.trim()).filter(x => x !== "");
-
-        const labels = [];
-        const rawData = [];
-
-        lines.forEach(line => {
-            const parts = line.split("|");
-            if (parts.length === 2) {
-                const time = parts[0].trim();
-                const value = parseFloat(parts[1].trim());
-                if (!isNaN(value)) {
-                    labels.push(time);
-                    rawData.push(value);
-                }
-            }
-        });
-
-        if (rawData.length === 0) return;
-
-        const base = rawData[0];
-        const profitData = rawData.map(v => parseFloat((v - base).toFixed(4)));
-
-        if (!chart) {
-            chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Profit (USDT)',
-                        data: profitData,
-                        borderWidth: 2,
-                        tension: 0.2
-                    }]
-                }
-            });
-        } else {
-            chart.data.labels = labels;
-            chart.data.datasets[0].data = profitData;
-            chart.update();
-        }
-
-        document.getElementById("lastUpdate").textContent =
-            "Last update: " + new Date().toLocaleTimeString();
-
-    } catch {
-        document.getElementById("lastUpdate").textContent = "Error loading chart";
-    }
-}
+document.getElementById("reconnectBtn").onclick = reconnectAll;
 
 // ===== INIT =====
 reconnectAll();
-loadChart();
-setInterval(loadChart, 600000);
 </script>
 
 </body>
