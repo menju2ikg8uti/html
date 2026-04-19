@@ -4,10 +4,7 @@
 <meta charset="UTF-8">
 <title>Connecting...</title>
 
-<link id="fav1" rel="icon">
-<link id="fav2" rel="icon">
-<link id="fav3" rel="icon">
-
+<link id="favicon" rel="icon">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
@@ -22,10 +19,14 @@
     padding: 20px;
   }
 
+  h3 {
+    margin-bottom: 10px;
+  }
+
   input {
     font-size: 1rem;
     padding: 5px;
-    margin-bottom: 5px;
+    margin-bottom: 10px;
     width: 150px;
     text-align: center;
   }
@@ -39,153 +40,221 @@
 
   pre {
     font-size: 2rem;
-    margin: 10px 0 5px 0;
-  }
-
-  .sub-price {
-    font-size: 1rem;
-    margin: 2px 0;
-    color: #aaaaaa;
+    margin: 10px 0 20px 0;
   }
 
   canvas {
     max-width: 900px;
     width: 100%;
   }
+
+  #lastUpdate {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: #aaaaaa;
+  }
 </style>
 </head>
 <body>
 
-<h3>XRP/USDT</h3>
+<h3>Latest XRP/USDT Price</h3>
 
-<input id="basePrice" type="number" step="0.0001" placeholder="Base">
-<input id="targetUp" type="number" step="0.0001" placeholder="Target Atas">
-<input id="targetDown" type="number" step="0.0001" placeholder="Target Bawah">
-
+<input id="basePrice" type="number" step="0.0001" placeholder="Enter base price">
 <button id="confirmBtn">Confirm</button>
 <button id="reconnectBtn">Reconnect</button>
 
 <pre id="output">Connecting...</pre>
 
-<div id="binance" class="sub-price">Binance: ...</div>
-
 <canvas id="chart"></canvas>
+<div id="lastUpdate">Loading chart...</div>
 
 <script>
 let userBasePrice = null;
-let targetUp = null;
-let targetDown = null;
-
-let wsMEXC = null;
-let wsBINANCE = null;
+let ws = null;
+let chart = null;
 
 const output = document.getElementById("output");
+const baseInput = document.getElementById("basePrice");
+const reconnectBtn = document.getElementById("reconnectBtn");
+const confirmBtn = document.getElementById("confirmBtn");
+const favicon = document.getElementById("favicon");
+const ctx = document.getElementById('chart').getContext('2d');
 
-const fav1 = document.getElementById("fav1"); // persen
-const fav2 = document.getElementById("fav2"); // target atas
-const fav3 = document.getElementById("fav3"); // target bawah
+const LOG_URL = "https://raw.githubusercontent.com/menju2ikg8uti/exchange-api/main/usdt_log.txt";
 
+// ===== FAVICON =====
 function createFavicon(color) {
     const canvas = document.createElement("canvas");
-    canvas.width = 32;
-    canvas.height = 32;
-    const ctx = canvas.getContext("2d");
+    canvas.width = 64;
+    canvas.height = 64;
 
+    const ctx = canvas.getContext("2d");
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(16, 16, 14, 0, Math.PI * 2);
+    ctx.arc(32, 32, 30, 0, Math.PI * 2);
     ctx.fill();
 
-    return canvas.toDataURL();
+    return canvas.toDataURL("image/png");
 }
 
-function setFavicons(percentColor, upColor, downColor) {
-    fav1.href = createFavicon(percentColor);
-    fav2.href = createFavicon(upColor);
-    fav3.href = createFavicon(downColor);
+function setFavicon(color) {
+    favicon.href = createFavicon(color);
 }
 
-function setValues() {
-    userBasePrice = parseFloat(basePrice.value) || null;
-    targetUp = parseFloat(document.getElementById("targetUp").value) || null;
-    targetDown = parseFloat(document.getElementById("targetDown").value) || null;
+// ===== BASE PRICE =====
+function setBasePrice() {
+    const val = parseFloat(baseInput.value);
+    if (!isNaN(val) && val > 0) {
+        userBasePrice = val;
+    } else {
+        userBasePrice = null;
+    }
 }
 
-confirmBtn.onclick = setValues;
+confirmBtn.addEventListener("click", setBasePrice);
+baseInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") setBasePrice();
+});
 
-// ===== MEXC =====
-function connectMEXC() {
-    if (wsMEXC) wsMEXC.close();
+// ===== WEBSOCKET =====
+function connectWS() {
+    if (ws) ws.close();
 
-    wsMEXC = new WebSocket("wss://wbs-api.mexc.com/ws");
+    output.textContent = "Connecting...";
+    document.title = "Connecting...";
+    setFavicon("#888888");
 
-    wsMEXC.onopen = () => {
-        wsMEXC.send(JSON.stringify({
+    ws = new WebSocket("wss://wbs-api.mexc.com/ws");
+
+    ws.onopen = () => {
+        const sub = {
             method: "SUBSCRIPTION",
-            params: ["spot@public.aggre.deals.v3.api.pb@10ms@XRPUSDT"]
-        }));
+            params: ["spot@public.aggre.deals.v3.api.pb@100ms@XRPUSDT"]
+        };
+        ws.send(JSON.stringify(sub));
     };
 
-    wsMEXC.onmessage = async (event) => {
+    ws.onmessage = async (event) => {
         let raw = event.data instanceof Blob ? await event.data.text() : event.data;
         const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
         const prices = clean.match(/\d+\.\d+/g);
 
-        if (!prices) return;
+        if (prices && prices.length > 0) {
+            const filtered = prices.filter(p => parseFloat(p) >= 0.1 && parseFloat(p) <= 5);
+            if (filtered.length > 0) {
+                const lastPrice = parseFloat(filtered[filtered.length - 1]);
 
-        const price = parseFloat(prices[prices.length - 1]);
+                let displayText = lastPrice.toFixed(4);
 
-        let text = price.toFixed(4);
+                if (userBasePrice !== null) {
+                    const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
+                    const sign = percent >= 0 ? "+" : "";
+                    displayText += ` (${sign}${percent.toFixed(2)}%)`;
 
-        let percentColor = "#ffffff";
-        let upColor = "#000000";
-        let downColor = "#000000";
+                    if (percent >= 0) {
+                        output.style.color = "#00ff00";
+                        setFavicon("#00ff00");
+                    } else {
+                        output.style.color = "#ff5555";
+                        setFavicon("#ff5555");
+                    }
+                } else {
+                    output.style.color = "#ffffff";
+                    setFavicon("#ffffff");
+                }
 
-        if (userBasePrice) {
-            let p = ((price - userBasePrice) / userBasePrice) * 100;
-            text += ` (${p.toFixed(2)}%)`;
-
-            percentColor = p >= 0 ? "#00ff00" : "#ff0000";
+                output.textContent = displayText;
+                document.title = displayText;
+            }
         }
-
-        if (targetUp && price >= targetUp) {
-            upColor = "#00ff00";
-        }
-
-        if (targetDown && price <= targetDown) {
-            downColor = "#ff0000";
-        }
-
-        setFavicons(percentColor, upColor, downColor);
-
-        output.textContent = text + " (MEXC)";
-        document.title = text;
     };
 }
 
-// ===== BINANCE =====
-function connectBINANCE() {
-    if (wsBINANCE) wsBINANCE.close();
+reconnectBtn.addEventListener("click", connectWS);
 
-    wsBINANCE = new WebSocket("wss://stream.binance.com:9443/ws/xrpusdt@trade");
+// ===== CHART (PROFIT MODE) =====
+async function loadChart() {
+    try {
+        const res = await fetch(LOG_URL + "?t=" + Date.now());
+        const text = await res.text();
 
-    wsBINANCE.onmessage = (e) => {
-        let data = JSON.parse(e.data);
-        document.getElementById("binance").innerText =
-            parseFloat(data.p).toFixed(4) + " (Binance)";
-    };
+        const lines = text
+            .split("\n")
+            .map(x => x.trim())
+            .filter(x => x !== "");
+
+        const labels = [];
+        const rawData = [];
+
+        lines.forEach(line => {
+            const parts = line.split("|");
+            if (parts.length === 2) {
+                const time = parts[0].trim();
+                const value = parseFloat(parts[1].trim());
+
+                if (!isNaN(value)) {
+                    labels.push(time);
+                    rawData.push(value);
+                }
+            }
+        });
+
+        if (rawData.length === 0) return;
+
+        const base = rawData[0];
+
+        const profitData = rawData.map(v => parseFloat((v - base).toFixed(4)));
+
+        if (!chart) {
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Profit (USDT)',
+                        data: profitData,
+                        borderWidth: 2,
+                        tension: 0.2
+                    }]
+                },
+                options: {
+                    plugins: {
+                        legend: {
+                            labels: { color: "#ffffff" }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                color: "#ffffff",
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        },
+                        y: {
+                            ticks: { color: "#ffffff" }
+                        }
+                    }
+                }
+            });
+        } else {
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = profitData;
+            chart.update();
+        }
+
+        document.getElementById("lastUpdate").textContent =
+            "Last update: " + new Date().toLocaleTimeString();
+
+    } catch (err) {
+        document.getElementById("lastUpdate").textContent = "Error loading chart";
+    }
 }
-
-// ===== RECONNECT ALL =====
-function reconnectAll() {
-    connectMEXC();
-    connectBINANCE();
-}
-
-reconnectBtn.onclick = reconnectAll;
 
 // ===== INIT =====
-reconnectAll();
+connectWS();
+loadChart();
+setInterval(loadChart, 600000);
 </script>
 
 </body>
