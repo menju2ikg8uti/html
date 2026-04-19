@@ -197,10 +197,10 @@ function connectWS() {
                 }
 
                 // ===== LAYER 3 (TOP / BOTTOM SYMBOL) =====
-                if (topPrice !== null && lastPrice >= topPrice) {
-                    titleSymbol = " 🔴";
-                } else if (bottomPrice !== null && lastPrice <= bottomPrice) {
-                    titleSymbol = " 🟢";
+                if (topPrice !== null && lastPrice > topPrice) {
+                    titleSymbol = " ⬆️";
+                } else if (bottomPrice !== null && lastPrice < bottomPrice) {
+                    titleSymbol = " ⬇️";
                 }
 
                 output.textContent = displayText;
