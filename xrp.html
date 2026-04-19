@@ -26,7 +26,7 @@
   input {
     font-size: 1rem;
     padding: 5px;
-    margin-bottom: 10px;
+    margin-bottom: 5px;
     width: 150px;
     text-align: center;
   }
@@ -59,7 +59,10 @@
 
 <h3>Latest XRP/USDT Price</h3>
 
-<input id="basePrice" type="number" step="0.0001" placeholder="Enter base price">
+<input id="basePrice" type="number" step="0.0001" placeholder="Base price">
+<input id="topPrice" type="number" step="0.0001" placeholder="Top price">
+<input id="bottomPrice" type="number" step="0.0001" placeholder="Bottom price">
+
 <button id="confirmBtn">Confirm</button>
 <button id="reconnectBtn">Reconnect</button>
 
@@ -70,11 +73,19 @@
 
 <script>
 let userBasePrice = null;
+let topPrice = null;
+let bottomPrice = null;
+
+let hitTop = false;
+let hitBottom = false;
+
 let ws = null;
 let chart = null;
 
 const output = document.getElementById("output");
 const baseInput = document.getElementById("basePrice");
+const topInput = document.getElementById("topPrice");
+const bottomInput = document.getElementById("bottomPrice");
 const reconnectBtn = document.getElementById("reconnectBtn");
 const confirmBtn = document.getElementById("confirmBtn");
 const favicon = document.getElementById("favicon");
@@ -82,39 +93,34 @@ const ctx = document.getElementById('chart').getContext('2d');
 
 const LOG_URL = "https://raw.githubusercontent.com/menju2ikg8uti/exchange-api/main/usdt_log.txt";
 
-// ===== FAVICON =====
-function createFavicon(color) {
-    const canvas = document.createElement("canvas");
-    canvas.width = 64;
-    canvas.height = 64;
+// ===== FAVICON (3 DOTS) =====
+function setFaviconMulti(color1, color2, color3) {
+    const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+        <circle cx="16" cy="32" r="10" fill="${color1}"/>
+        <circle cx="32" cy="32" r="10" fill="${color2}"/>
+        <circle cx="48" cy="32" r="10" fill="${color3}"/>
+    </svg>`;
 
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(32, 32, 30, 0, Math.PI * 2);
-    ctx.fill();
-
-    return canvas.toDataURL("image/png");
+    favicon.href = "data:image/svg+xml;base64," + btoa(svg);
 }
 
-function setFavicon(color) {
-    favicon.href = createFavicon(color);
-}
-
-// ===== BASE PRICE =====
+// ===== BASE / TARGET =====
 function setBasePrice() {
-    const val = parseFloat(baseInput.value);
-    if (!isNaN(val) && val > 0) {
-        userBasePrice = val;
-    } else {
-        userBasePrice = null;
-    }
+    const base = parseFloat(baseInput.value);
+    const top = parseFloat(topInput.value);
+    const bottom = parseFloat(bottomInput.value);
+
+    userBasePrice = (!isNaN(base) && base > 0) ? base : null;
+    topPrice = (!isNaN(top) && top > 0) ? top : null;
+    bottomPrice = (!isNaN(bottom) && bottom > 0) ? bottom : null;
+
+    // reset trigger
+    hitTop = false;
+    hitBottom = false;
 }
 
 confirmBtn.addEventListener("click", setBasePrice);
-baseInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") setBasePrice();
-});
 
 // ===== WEBSOCKET =====
 function connectWS() {
@@ -122,16 +128,15 @@ function connectWS() {
 
     output.textContent = "Connecting...";
     document.title = "Connecting...";
-    setFavicon("#888888");
+    setFaviconMulti("#888888", "#000000", "#000000");
 
     ws = new WebSocket("wss://wbs-api.mexc.com/ws");
 
     ws.onopen = () => {
-        const sub = {
+        ws.send(JSON.stringify({
             method: "SUBSCRIPTION",
             params: ["spot@public.aggre.deals.v3.api.pb@100ms@XRPUSDT"]
-        };
-        ws.send(JSON.stringify(sub));
+        }));
     };
 
     ws.onmessage = async (event) => {
@@ -140,48 +145,58 @@ function connectWS() {
         const prices = clean.match(/\d+\.\d+/g);
 
         if (prices && prices.length > 0) {
-            const filtered = prices.filter(p => parseFloat(p) >= 0.1 && parseFloat(p) <= 5);
-            if (filtered.length > 0) {
-                const lastPrice = parseFloat(filtered[filtered.length - 1]);
+            const lastPrice = parseFloat(prices[prices.length - 1]);
 
-                let displayText = lastPrice.toFixed(4);
+            let displayText = lastPrice.toFixed(4);
 
-                if (userBasePrice !== null) {
-                    const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
-                    const sign = percent >= 0 ? "+" : "";
-                    displayText += ` (${sign}${percent.toFixed(2)}%)`;
+            // ===== ICON COLORS =====
+            let colorPercent = "#ffffff";
+            let colorTop = "#000000";
+            let colorBottom = "#000000";
 
-                    if (percent >= 0) {
-                        output.style.color = "#00ff00";
-                        setFavicon("#00ff00");
-                    } else {
-                        output.style.color = "#ff5555";
-                        setFavicon("#ff5555");
-                    }
+            if (userBasePrice !== null) {
+                const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
+                const sign = percent >= 0 ? "+" : "";
+
+                displayText += ` (${sign}${percent.toFixed(2)}%)`;
+
+                if (percent >= 0) {
+                    colorPercent = "#00ff00";
                 } else {
-                    output.style.color = "#ffffff";
-                    setFavicon("#ffffff");
+                    colorPercent = "#ff0000";
                 }
-
-                output.textContent = displayText;
-                document.title = displayText;
             }
+
+            // ===== TOP TRIGGER =====
+            if (topPrice !== null && lastPrice >= topPrice) {
+                hitTop = true;
+            }
+
+            // ===== BOTTOM TRIGGER =====
+            if (bottomPrice !== null && lastPrice <= bottomPrice) {
+                hitBottom = true;
+            }
+
+            if (hitTop) colorTop = "#00ff00";
+            if (hitBottom) colorBottom = "#00ff00";
+
+            setFaviconMulti(colorPercent, colorTop, colorBottom);
+
+            output.textContent = displayText;
+            document.title = displayText;
         }
     };
 }
 
 reconnectBtn.addEventListener("click", connectWS);
 
-// ===== CHART (PROFIT MODE) =====
+// ===== CHART =====
 async function loadChart() {
     try {
         const res = await fetch(LOG_URL + "?t=" + Date.now());
         const text = await res.text();
 
-        const lines = text
-            .split("\n")
-            .map(x => x.trim())
-            .filter(x => x !== "");
+        const lines = text.split("\n").filter(x => x.trim() !== "");
 
         const labels = [];
         const rawData = [];
@@ -189,11 +204,9 @@ async function loadChart() {
         lines.forEach(line => {
             const parts = line.split("|");
             if (parts.length === 2) {
-                const time = parts[0].trim();
-                const value = parseFloat(parts[1].trim());
-
+                const value = parseFloat(parts[1]);
                 if (!isNaN(value)) {
-                    labels.push(time);
+                    labels.push(parts[0]);
                     rawData.push(value);
                 }
             }
@@ -202,8 +215,7 @@ async function loadChart() {
         if (rawData.length === 0) return;
 
         const base = rawData[0];
-
-        const profitData = rawData.map(v => parseFloat((v - base).toFixed(4)));
+        const profitData = rawData.map(v => v - base);
 
         if (!chart) {
             chart = new Chart(ctx, {
@@ -213,28 +225,8 @@ async function loadChart() {
                     datasets: [{
                         label: 'Profit (USDT)',
                         data: profitData,
-                        borderWidth: 2,
-                        tension: 0.2
+                        borderWidth: 2
                     }]
-                },
-                options: {
-                    plugins: {
-                        legend: {
-                            labels: { color: "#ffffff" }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            ticks: {
-                                color: "#ffffff",
-                                maxRotation: 45,
-                                minRotation: 45
-                            }
-                        },
-                        y: {
-                            ticks: { color: "#ffffff" }
-                        }
-                    }
                 }
             });
         } else {
@@ -246,12 +238,11 @@ async function loadChart() {
         document.getElementById("lastUpdate").textContent =
             "Last update: " + new Date().toLocaleTimeString();
 
-    } catch (err) {
+    } catch {
         document.getElementById("lastUpdate").textContent = "Error loading chart";
     }
 }
 
-// ===== INIT =====
 connectWS();
 loadChart();
 setInterval(loadChart, 600000);
