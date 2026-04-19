@@ -122,7 +122,7 @@ function connectMEXC() {
     wsMEXC.onopen = () => {
         wsMEXC.send(JSON.stringify({
             method: "SUBSCRIPTION",
-            params: ["spot@public.aggre.deals.v3.api.pb@100ms@XRPUSDT"]
+            params: ["spot@public.aggre.deals.v3.api.pb@10ms@XRPUSDT"]
         }));
     };
 
