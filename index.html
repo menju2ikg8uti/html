@@ -19,7 +19,7 @@
 </head>
 <body>
 
-<h3>MEXC XRPUSDT Raw Stream</h3>
+<h3>MEXC XRPUSDT Raw Stream (JSON)</h3>
 <div id="log"></div>
 
 <script>
@@ -43,7 +43,7 @@ function connectMEXC() {
 
         wsMEXC.send(JSON.stringify({
             method: "SUBSCRIPTION",
-            params: ["spot@public.aggre.deals.v3.api.pb@10ms@XRPUSDT"]
+            params: ["spot@public.deals.v3.api@XRPUSDT"]
         }));
     };
 
