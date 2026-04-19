@@ -176,29 +176,43 @@ function connectMEXC() {
     };
 
     mexcWS.onmessage = async (event) => {
-        let raw = event.data instanceof Blob ? await event.data.text() : event.data;
-        const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
-        const prices = clean.match(/\d+\.\d+/g);
+        try {
+            let raw = event.data instanceof Blob ? await event.data.text() : event.data;
 
-        if (prices && prices.length > 0) {
-            const lastPrice = parseFloat(prices[prices.length - 1]);
+            const data = JSON.parse(raw);
 
-            let displayText = lastPrice.toFixed(4);
+            // pastikan struktur benar
+            if (data && data.d && data.d.deals && data.d.deals.length > 0) {
 
-            if (userBasePrice !== null) {
-                const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
-                const sign = percent >= 0 ? "+" : "";
-                displayText += ` (${sign}${percent.toFixed(2)}%)`;
+                // ambil deal terakhir
+                const lastDeal = data.d.deals[data.d.deals.length - 1];
 
-                output.style.color = percent >= 0 ? "#00ff00" : "#ff5555";
-            } else {
-                output.style.color = "#ffffff";
+                const lastPrice = parseFloat(lastDeal.p);
+
+                if (!isNaN(lastPrice)) {
+
+                    let displayText = lastPrice.toFixed(4);
+
+                    if (userBasePrice !== null) {
+                        const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
+                        const sign = percent >= 0 ? "+" : "";
+                        displayText += ` (${sign}${percent.toFixed(2)}%)`;
+
+                        output.style.color = percent >= 0 ? "#00ff00" : "#ff5555";
+                    } else {
+                        output.style.color = "#ffffff";
+                    }
+
+                    output.textContent = displayText + " (MEXC)";
+                    document.title = displayText;
+
+                    updateFavicon(lastPrice);
+                }
             }
 
-            output.textContent = displayText + " (MEXC)";
-            document.title = displayText;
-
-            updateFavicon(lastPrice);
+        } catch (err) {
+            // kalau ada data aneh, skip saja
+            console.log("Parse error:", err);
         }
     };
 }
