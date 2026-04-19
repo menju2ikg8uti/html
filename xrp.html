@@ -4,186 +4,188 @@
 <meta charset="UTF-8">
 <title>Connecting...</title>
 
-<link id="favicon" rel="icon">
+<link id="fav1" rel="icon">
+<link id="fav2" rel="icon">
+<link id="fav3" rel="icon">
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body {
-  background:#1e1e1e;
-  color:#fff;
-  font-family:monospace;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-}
-input,button{margin:5px;padding:5px}
-pre{font-size:2rem}
-canvas{max-width:900px;width:100%}
+  body {
+    background-color: #1e1e1e;
+    color: #ffffff;
+    font-family: monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0;
+    padding: 20px;
+  }
+
+  input {
+    font-size: 1rem;
+    padding: 5px;
+    margin-bottom: 5px;
+    width: 150px;
+    text-align: center;
+  }
+
+  button {
+    font-size: 0.9rem;
+    padding: 5px 10px;
+    margin-bottom: 10px;
+    cursor: pointer;
+  }
+
+  pre {
+    font-size: 2rem;
+    margin: 10px 0 5px 0;
+  }
+
+  .sub-price {
+    font-size: 1rem;
+    margin: 2px 0;
+    color: #aaaaaa;
+  }
+
+  canvas {
+    max-width: 900px;
+    width: 100%;
+  }
 </style>
 </head>
 <body>
 
 <h3>XRP/USDT</h3>
 
-<input id="basePrice" placeholder="Base">
-<input id="targetUp" placeholder="Target Atas">
-<input id="targetDown" placeholder="Target Bawah">
+<input id="basePrice" type="number" step="0.0001" placeholder="Base">
+<input id="targetUp" type="number" step="0.0001" placeholder="Target Atas">
+<input id="targetDown" type="number" step="0.0001" placeholder="Target Bawah">
 
-<button onclick="setInputs()">Confirm</button>
-<button onclick="reconnectAll()">Reconnect</button>
+<button id="confirmBtn">Confirm</button>
+<button id="reconnectBtn">Reconnect</button>
 
 <pre id="output">Connecting...</pre>
-<div id="binance">Binance: ...</div>
+
+<div id="binance" class="sub-price">Binance: ...</div>
 
 <canvas id="chart"></canvas>
 
 <script>
-let userBasePrice=null,targetUp=null,targetDown=null,hitState=null;
-let ws=null,binanceWS=null;
-let lastValidPrice=null;
-let chart=null;
+let userBasePrice = null;
+let targetUp = null;
+let targetDown = null;
 
-const output=document.getElementById("output");
-const favicon=document.getElementById("favicon");
-const ctx=document.getElementById("chart").getContext("2d");
+let wsMEXC = null;
+let wsBINANCE = null;
 
-const LOG_URL="https://raw.githubusercontent.com/menju2ikg8uti/exchange-api/main/usdt_log.txt";
+const output = document.getElementById("output");
 
-// ===== FAVICON =====
-function setFavicon(c){
- let canvas=document.createElement("canvas");
- canvas.width=64;canvas.height=64;
- let x=canvas.getContext("2d");
- x.fillStyle=c;x.beginPath();x.arc(32,32,30,0,Math.PI*2);x.fill();
- favicon.href=canvas.toDataURL();
+const fav1 = document.getElementById("fav1"); // persen
+const fav2 = document.getElementById("fav2"); // target atas
+const fav3 = document.getElementById("fav3"); // target bawah
+
+function createFavicon(color) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext("2d");
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(16, 16, 14, 0, Math.PI * 2);
+    ctx.fill();
+
+    return canvas.toDataURL();
 }
 
-// ===== INPUT =====
-function setInputs(){
- userBasePrice=parseFloat(basePrice.value)||null;
- targetUp=parseFloat(targetUp.value)||null;
- targetDown=parseFloat(targetDown.value)||null;
- hitState=null;
+function setFavicons(percentColor, upColor, downColor) {
+    fav1.href = createFavicon(percentColor);
+    fav2.href = createFavicon(upColor);
+    fav3.href = createFavicon(downColor);
 }
 
-// ===== ICON =====
-function updateFavicon(p){
- if(hitState===null){
-  if(targetUp&&p>=targetUp)hitState="up";
-  if(targetDown&&p<=targetDown)hitState="down";
- }
- if(hitState==="up"){setFavicon("#00ff00");return;}
- if(hitState==="down"){setFavicon("#ff0000");return;}
-
- if(userBasePrice){
-  let percent=(p-userBasePrice)/userBasePrice;
-  setFavicon(percent>=0?"#00aa00":"#aa0000");
- }else setFavicon("#000000");
+function setValues() {
+    userBasePrice = parseFloat(basePrice.value) || null;
+    targetUp = parseFloat(document.getElementById("targetUp").value) || null;
+    targetDown = parseFloat(document.getElementById("targetDown").value) || null;
 }
+
+confirmBtn.onclick = setValues;
 
 // ===== MEXC =====
-function connectWS(){
- if(ws)ws.close();
+function connectMEXC() {
+    if (wsMEXC) wsMEXC.close();
 
- ws=new WebSocket("wss://wbs-api.mexc.com/ws");
+    wsMEXC = new WebSocket("wss://wbs-api.mexc.com/ws");
 
- ws.onopen=()=>{
-  ws.send(JSON.stringify({
-   method:"SUBSCRIPTION",
-   params:["spot@public.aggre.deals.v3.api.pb@10ms@XRPUSDT"]
-  }));
- };
+    wsMEXC.onopen = () => {
+        wsMEXC.send(JSON.stringify({
+            method: "SUBSCRIPTION",
+            params: ["spot@public.aggre.deals.v3.api.pb@100ms@XRPUSDT"]
+        }));
+    };
 
- ws.onmessage=async(e)=>{
-  let raw=e.data instanceof Blob?await e.data.text():e.data;
+    wsMEXC.onmessage = async (event) => {
+        let raw = event.data instanceof Blob ? await event.data.text() : event.data;
+        const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
+        const prices = clean.match(/\d+\.\d+/g);
 
-  let prices=raw.match(/\d+\.\d+/g);
-  if(!prices)return;
+        if (!prices) return;
 
-  let filtered=prices.map(Number).filter(v=>v>0.1&&v<5);
-  if(!filtered.length)return;
+        const price = parseFloat(prices[prices.length - 1]);
 
-  let price=filtered.at(-1);
+        let text = price.toFixed(4);
 
-  // anti spike
-  if(lastValidPrice){
-   let diff=Math.abs(price-lastValidPrice)/lastValidPrice;
-   if(diff>0.03)return;
-  }
-  lastValidPrice=price;
+        let percentColor = "#ffffff";
+        let upColor = "#000000";
+        let downColor = "#000000";
 
-  let text=price.toFixed(4);
+        if (userBasePrice) {
+            let p = ((price - userBasePrice) / userBasePrice) * 100;
+            text += ` (${p.toFixed(2)}%)`;
 
-  if(userBasePrice){
-   let percent=((price-userBasePrice)/userBasePrice)*100;
-   text+=` (${percent>=0?"+":""}${percent.toFixed(2)}%)`;
-   output.style.color=percent>=0?"#00ff00":"#ff5555";
-  }else output.style.color="#fff";
+            percentColor = p >= 0 ? "#00ff00" : "#ff0000";
+        }
 
-  output.textContent=text+" (MEXC)";
-  document.title=text;
+        if (targetUp && price >= targetUp) {
+            upColor = "#00ff00";
+        }
 
-  updateFavicon(price);
- };
+        if (targetDown && price <= targetDown) {
+            downColor = "#ff0000";
+        }
+
+        setFavicons(percentColor, upColor, downColor);
+
+        output.textContent = text + " (MEXC)";
+        document.title = text;
+    };
 }
 
 // ===== BINANCE =====
-function connectBinance(){
- if(binanceWS)binanceWS.close();
- binanceWS=new WebSocket("wss://stream.binance.com:9443/ws/xrpusdt@trade");
+function connectBINANCE() {
+    if (wsBINANCE) wsBINANCE.close();
 
- binanceWS.onmessage=e=>{
-  let d=JSON.parse(e.data);
-  document.getElementById("binance").innerText=d.p+" (Binance)";
- };
+    wsBINANCE = new WebSocket("wss://stream.binance.com:9443/ws/xrpusdt@trade");
+
+    wsBINANCE.onmessage = (e) => {
+        let data = JSON.parse(e.data);
+        document.getElementById("binance").innerText =
+            parseFloat(data.p).toFixed(4) + " (Binance)";
+    };
 }
 
-// ===== RECONNECT =====
-function reconnectAll(){
- connectWS();
- connectBinance();
+// ===== RECONNECT ALL =====
+function reconnectAll() {
+    connectMEXC();
+    connectBINANCE();
 }
 
-// ===== CHART =====
-async function loadChart(){
- try{
-  let res=await fetch(LOG_URL+"?t="+Date.now());
-  let txt=await res.text();
-
-  let labels=[],data=[];
-  txt.split("\n").forEach(l=>{
-   let p=l.split("|");
-   if(p.length===2){
-    labels.push(p[0].trim());
-    data.push(parseFloat(p[1]));
-   }
-  });
-
-  if(!data.length)return;
-
-  let base=data[0];
-  let profit=data.map(v=>v-base);
-
-  if(!chart){
-   chart=new Chart(ctx,{
-    type:"line",
-    data:{labels,
-     datasets:[{data:profit,borderWidth:2}]
-    }
-   });
-  }else{
-   chart.data.labels=labels;
-   chart.data.datasets[0].data=profit;
-   chart.update();
-  }
-
- }catch{}
-}
+reconnectBtn.onclick = reconnectAll;
 
 // ===== INIT =====
 reconnectAll();
-loadChart();
-setInterval(loadChart,600000);
 </script>
 
 </body>
