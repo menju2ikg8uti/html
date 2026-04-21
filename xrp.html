@@ -73,6 +73,11 @@ let userBasePrice = null;
 let ws = null;
 let chart = null;
 
+// ===== NEW: NOTIFICATION STATE =====
+let triggerPrice = null;
+let triggered = false;
+const tolerancePercent = 0.01; // 0.01%
+
 const output = document.getElementById("output");
 const baseInput = document.getElementById("basePrice");
 const reconnectBtn = document.getElementById("reconnectBtn");
@@ -101,13 +106,19 @@ function setFavicon(color) {
     favicon.href = createFavicon(color);
 }
 
-// ===== BASE PRICE =====
+// ===== BASE + TRIGGER =====
 function setBasePrice() {
     const val = parseFloat(baseInput.value);
     if (!isNaN(val) && val > 0) {
         userBasePrice = val;
+
+        // ===== SET TRIGGER =====
+        triggerPrice = val;
+        triggered = false; // reset notif
     } else {
         userBasePrice = null;
+        triggerPrice = null;
+        triggered = false;
     }
 }
 
@@ -146,6 +157,7 @@ function connectWS() {
 
                 let displayText = lastPrice.toFixed(4);
 
+                // ===== PERCENT =====
                 if (userBasePrice !== null) {
                     const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
                     const sign = percent >= 0 ? "+" : "";
@@ -163,8 +175,25 @@ function connectWS() {
                     setFavicon("#ffffff");
                 }
 
+                // ===== TRIGGER LOGIC =====
+                if (triggerPrice !== null && !triggered) {
+                    const tolerance = triggerPrice * (tolerancePercent / 100);
+                    const min = triggerPrice - tolerance;
+                    const max = triggerPrice + tolerance;
+
+                    if (lastPrice >= min && lastPrice <= max) {
+                        triggered = true;
+                    }
+                }
+
+                // ===== TITLE =====
+                if (triggered) {
+                    document.title = "🟩 " + displayText;
+                } else {
+                    document.title = displayText;
+                }
+
                 output.textContent = displayText;
-                document.title = displayText;
             }
         }
     };
@@ -172,7 +201,7 @@ function connectWS() {
 
 reconnectBtn.addEventListener("click", connectWS);
 
-// ===== CHART (PROFIT MODE) =====
+// ===== CHART =====
 async function loadChart() {
     try {
         const res = await fetch(LOG_URL + "?t=" + Date.now());
@@ -202,7 +231,6 @@ async function loadChart() {
         if (rawData.length === 0) return;
 
         const base = rawData[0];
-
         const profitData = rawData.map(v => parseFloat((v - base).toFixed(4)));
 
         if (!chart) {
@@ -216,25 +244,6 @@ async function loadChart() {
                         borderWidth: 2,
                         tension: 0.2
                     }]
-                },
-                options: {
-                    plugins: {
-                        legend: {
-                            labels: { color: "#ffffff" }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            ticks: {
-                                color: "#ffffff",
-                                maxRotation: 45,
-                                minRotation: 45
-                            }
-                        },
-                        y: {
-                            ticks: { color: "#ffffff" }
-                        }
-                    }
                 }
             });
         } else {
