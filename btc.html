@@ -150,27 +150,18 @@ function connectWS() {
     ws.onmessage = async (event) => {
         let raw = event.data instanceof Blob ? await event.data.text() : event.data;
 
-        console.log("RAW:", raw);
-
-        // ===== CLEAN STRING =====
         const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
-
-        // ===== AMBIL SEMUA ANGKA =====
         const matches = clean.match(/\d+\.\d+/g);
 
         if (!matches) return;
 
-        // ===== FILTER KHUSUS BTC =====
         const validPrices = matches
             .map(Number)
-            .filter(p => p > 10000 && p < 200000); // range realistis BTC
+            .filter(p => p > 10000 && p < 200000);
 
         if (validPrices.length === 0) return;
 
         const lastPrice = validPrices[validPrices.length - 1];
-
-        console.log("FILTERED:", validPrices);
-        console.log("FINAL PRICE:", lastPrice);
 
         let displayText = formatNumber(lastPrice);
 
@@ -191,7 +182,6 @@ function connectWS() {
             setFavicon("#ffffff");
         }
 
-        // ===== TRIGGER =====
         if (triggerPrice !== null && !triggered) {
             const tolerance = triggerPrice * (tolerancePercent / 100);
             if (Math.abs(lastPrice - triggerPrice) <= tolerance) {
