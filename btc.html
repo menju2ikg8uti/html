@@ -151,9 +151,7 @@ function connectWS() {
         const prices = clean.match(/\d+\.\d+/g);
 
         if (prices && prices.length > 0) {
-            const filtered = prices.filter(p => parseFloat(p) >= 0.1 && parseFloat(p) <= 5);
-            if (filtered.length > 0) {
-                const lastPrice = parseFloat(filtered[filtered.length - 1]);
+            const lastPrice = parseFloat(filtered[filtered.length - 1]);
 
                 let displayText = lastPrice.toFixed(4);
 
