@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Connecting...</title>
+
+<link id="favicon" rel="icon">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+  body {
+    background-color: #1e1e1e;
+    color: #ffffff;
+    font-family: monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0;
+    padding: 20px;
+  }
+
+  h3 {
+    margin-bottom: 10px;
+  }
+
+  input {
+    font-size: 1rem;
+    padding: 5px;
+    margin-bottom: 10px;
+    width: 150px;
+    text-align: center;
+  }
+
+  button {
+    font-size: 0.9rem;
+    padding: 5px 10px;
+    margin-bottom: 10px;
+    cursor: pointer;
+  }
+
+  pre {
+    font-size: 2rem;
+    margin: 10px 0 20px 0;
+  }
+
+  canvas {
+    max-width: 900px;
+    width: 100%;
+  }
+
+  #lastUpdate {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: #aaaaaa;
+  }
+</style>
+</head>
+<body>
+
+<h3>Latest BTC/USDT Price</h3>
+
+<input id="basePrice" type="number" step="0.0001" placeholder="Enter base price">
+<button id="confirmBtn">Confirm</button>
+<button id="reconnectBtn">Reconnect</button>
+
+<pre id="output">Connecting...</pre>
+
+<canvas id="chart"></canvas>
+<div id="lastUpdate">Loading chart...</div>
+
+<script>
+let userBasePrice = null;
+let ws = null;
+let chart = null;
+
+// ===== NEW: NOTIFICATION STATE =====
+let triggerPrice = null;
+let triggered = false;
+const tolerancePercent = 0.01; // 0.01%
+
+const output = document.getElementById("output");
+const baseInput = document.getElementById("basePrice");
+const reconnectBtn = document.getElementById("reconnectBtn");
+const confirmBtn = document.getElementById("confirmBtn");
+const favicon = document.getElementById("favicon");
+const ctx = document.getElementById('chart').getContext('2d');
+
+const LOG_URL = "https://raw.githubusercontent.com/menju2ikg8uti/exchange-api/main/usdt_log.txt";
+
+// ===== FAVICON =====
+function createFavicon(color) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 64;
+
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(32, 32, 30, 0, Math.PI * 2);
+    ctx.fill();
+
+    return canvas.toDataURL("image/png");
+}
+
+function setFavicon(color) {
+    favicon.href = createFavicon(color);
+}
+
+// ===== BASE + TRIGGER =====
+function setBasePrice() {
+    const val = parseFloat(baseInput.value);
+    if (!isNaN(val) && val > 0) {
+        userBasePrice = val;
+
+        // ===== SET TRIGGER =====
+        triggerPrice = val;
+        triggered = false; // reset notif
+    } else {
+        userBasePrice = null;
+        triggerPrice = null;
+        triggered = false;
+    }
+}
+
+confirmBtn.addEventListener("click", setBasePrice);
+baseInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") setBasePrice();
+});
+
+// ===== WEBSOCKET =====
+function connectWS() {
+    if (ws) ws.close();
+
+    output.textContent = "Connecting...";
+    document.title = "Connecting...";
+    setFavicon("#888888");
+
+    ws = new WebSocket("wss://wbs-api.mexc.com/ws");
+
+    ws.onopen = () => {
+        const sub = {
+            method: "SUBSCRIPTION",
+            params: ["spot@public.aggre.deals.v3.api.pb@100ms@BTCUSDT"]
+        };
+        ws.send(JSON.stringify(sub));
+    };
+
+    ws.onmessage = async (event) => {
+        let raw = event.data instanceof Blob ? await event.data.text() : event.data;
+        const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
+        const prices = clean.match(/\d+\.\d+/g);
+
+        if (prices && prices.length > 0) {
+            const filtered = prices.filter(p => parseFloat(p) >= 0.1 && parseFloat(p) <= 5);
+            if (filtered.length > 0) {
+                const lastPrice = parseFloat(filtered[filtered.length - 1]);
+
+                let displayText = lastPrice.toFixed(4);
+
+                // ===== PERCENT =====
+                if (userBasePrice !== null) {
+                    const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
+                    const sign = percent >= 0 ? "+" : "";
+                    displayText += ` (${sign}${percent.toFixed(2)}%)`;
+
+                    if (percent >= 0) {
+                        output.style.color = "#00ff00";
+                        setFavicon("#00ff00");
+                    } else {
+                        output.style.color = "#ff5555";
+                        setFavicon("#ff5555");
+                    }
+                } else {
+                    output.style.color = "#ffffff";
+                    setFavicon("#ffffff");
+                }
+
+                // ===== TRIGGER LOGIC =====
+                if (triggerPrice !== null && !triggered) {
+                    const tolerance = triggerPrice * (tolerancePercent / 100);
+                    const min = triggerPrice - tolerance;
+                    const max = triggerPrice + tolerance;
+
+                    if (lastPrice >= min && lastPrice <= max) {
+                        triggered = true;
+                    }
+                }
+
+                // ===== TITLE =====
+                if (triggered) {
+                    document.title = "🟩🟩🟩 " + displayText;
+                } else {
+                    document.title = displayText;
+                }
+
+                output.textContent = displayText;
+            }
+        }
+    };
+}
+
+reconnectBtn.addEventListener("click", connectWS);
+
+// ===== CHART =====
+async function loadChart() {
+    try {
+        const res = await fetch(LOG_URL + "?t=" + Date.now());
+        const text = await res.text();
+
+        const lines = text
+            .split("\n")
+            .map(x => x.trim())
+            .filter(x => x !== "");
+
+        const labels = [];
+        const rawData = [];
+
+        lines.forEach(line => {
+            const parts = line.split("|");
+            if (parts.length === 2) {
+                const time = parts[0].trim();
+                const value = parseFloat(parts[1].trim());
+
+                if (!isNaN(value)) {
+                    labels.push(time);
+                    rawData.push(value);
+                }
+            }
+        });
+
+        if (rawData.length === 0) return;
+
+        const base = rawData[0];
+        const profitData = rawData.map(v => parseFloat((v - base).toFixed(4)));
+
+        if (!chart) {
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Profit (USDT)',
+                        data: profitData,
+                        borderWidth: 2,
+                        tension: 0.2
+                    }]
+                }
+            });
+        } else {
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = profitData;
+            chart.update();
+        }
+
+        document.getElementById("lastUpdate").textContent =
+            "Last update: " + new Date().toLocaleTimeString();
+
+    } catch (err) {
+        document.getElementById("lastUpdate").textContent = "Error loading chart";
+    }
+}
+
+// ===== INIT =====
+connectWS();
+loadChart();
+setInterval(loadChart, 600000);
+</script>
+
+</body>
+</html>
