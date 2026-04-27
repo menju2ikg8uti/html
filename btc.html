@@ -59,7 +59,7 @@
 
 <h3>Latest BTC/USDT Price</h3>
 
-<input id="basePrice" type="number" step="0.0001" placeholder="Enter base price">
+<input id="basePrice" type="number" step="0.01" placeholder="Enter base price">
 <button id="confirmBtn">Confirm</button>
 <button id="reconnectBtn">Reconnect</button>
 
@@ -73,10 +73,9 @@ let userBasePrice = null;
 let ws = null;
 let chart = null;
 
-// ===== NEW: NOTIFICATION STATE =====
 let triggerPrice = null;
 let triggered = false;
-const tolerancePercent = 0.01; // 0.01%
+const tolerancePercent = 0.01;
 
 const output = document.getElementById("output");
 const baseInput = document.getElementById("basePrice");
@@ -86,6 +85,14 @@ const favicon = document.getElementById("favicon");
 const ctx = document.getElementById('chart').getContext('2d');
 
 const LOG_URL = "https://raw.githubusercontent.com/menju2ikg8uti/exchange-api/main/usdt_log.txt";
+
+// ===== FORMAT NUMBER =====
+function formatNumber(num) {
+    return num.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
 
 // ===== FAVICON =====
 function createFavicon(color) {
@@ -106,15 +113,13 @@ function setFavicon(color) {
     favicon.href = createFavicon(color);
 }
 
-// ===== BASE + TRIGGER =====
+// ===== BASE =====
 function setBasePrice() {
     const val = parseFloat(baseInput.value);
     if (!isNaN(val) && val > 0) {
         userBasePrice = val;
-
-        // ===== SET TRIGGER =====
         triggerPrice = val;
-        triggered = false; // reset notif
+        triggered = false;
     } else {
         userBasePrice = null;
         triggerPrice = null;
@@ -140,19 +145,23 @@ function connectWS() {
     ws.onopen = () => {
         const sub = {
             method: "SUBSCRIPTION",
-            params: ["spot@public.deals.v3.api@100ms@BTCUSDT"]
+            params: ["spot@public.aggre.deals.v3.api.pb@100ms@BTCUSDT"]
         };
         ws.send(JSON.stringify(sub));
     };
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
+        let raw = event.data instanceof Blob ? await event.data.text() : event.data;
+
         try {
-            const data = JSON.parse(event.data);
+            const data = JSON.parse(raw);
 
-            if (data && data.d && data.d.deals && data.d.deals.length > 0) {
-                const lastPrice = parseFloat(data.d.deals[0].p);
+            if (data?.d?.deals && data.d.deals.length > 0) {
+                const lastPrice = parseFloat(
+                    data.d.deals[data.d.deals.length - 1].p
+                );
 
-                let displayText = lastPrice.toFixed(2);
+                let displayText = formatNumber(lastPrice);
 
                 if (userBasePrice !== null) {
                     const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
@@ -171,6 +180,7 @@ function connectWS() {
                     setFavicon("#ffffff");
                 }
 
+                // ===== TRIGGER =====
                 if (triggerPrice !== null && !triggered) {
                     const tolerance = triggerPrice * (tolerancePercent / 100);
                     const min = triggerPrice - tolerance;
@@ -190,17 +200,9 @@ function connectWS() {
                 output.textContent = displayText;
             }
 
-        } catch (err) {
-            console.log("Parse error:", err);
+        } catch (e) {
+            console.log("parse error");
         }
-    };
-
-    ws.onerror = () => {
-        output.textContent = "WebSocket Error";
-    };
-
-    ws.onclose = () => {
-        output.textContent = "Disconnected";
     };
 }
 
