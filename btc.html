@@ -86,7 +86,7 @@ const ctx = document.getElementById('chart').getContext('2d');
 
 const LOG_URL = "https://raw.githubusercontent.com/menju2ikg8uti/exchange-api/main/usdt_log.txt";
 
-// ===== FORMAT NUMBER =====
+// ===== FORMAT =====
 function formatNumber(num) {
     return num.toLocaleString("en-US", {
         minimumFractionDigits: 2,
@@ -153,13 +153,25 @@ function connectWS() {
     ws.onmessage = async (event) => {
         let raw = event.data instanceof Blob ? await event.data.text() : event.data;
 
+        // ===== DEBUG RAW =====
+        console.log("RAW:", raw);
+
         try {
             const data = JSON.parse(raw);
 
+            // ===== DEBUG PARSED =====
+            console.log("PARSED:", data);
+
+            if (data?.d?.deals) {
+                console.log("DEALS:", data.d.deals);
+            }
+
             if (data?.d?.deals && data.d.deals.length > 0) {
-                const lastPrice = parseFloat(
-                    data.d.deals[data.d.deals.length - 1].p
-                );
+                const lastDeal = data.d.deals[data.d.deals.length - 1];
+                const lastPrice = parseFloat(lastDeal.p);
+
+                // ===== DEBUG PRICE =====
+                console.log("LAST PRICE:", lastPrice);
 
                 let displayText = formatNumber(lastPrice);
 
@@ -180,7 +192,6 @@ function connectWS() {
                     setFavicon("#ffffff");
                 }
 
-                // ===== TRIGGER =====
                 if (triggerPrice !== null && !triggered) {
                     const tolerance = triggerPrice * (tolerancePercent / 100);
                     const min = triggerPrice - tolerance;
@@ -201,7 +212,7 @@ function connectWS() {
             }
 
         } catch (e) {
-            console.log("parse error");
+            console.log("PARSE ERROR:", e);
         }
     };
 }
