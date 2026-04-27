@@ -140,22 +140,20 @@ function connectWS() {
     ws.onopen = () => {
         const sub = {
             method: "SUBSCRIPTION",
-            params: ["spot@public.aggre.deals.v3.api.pb@100ms@BTCUSDT"]
+            params: ["spot@public.deals.v3.api@100ms@BTCUSDT"]
         };
         ws.send(JSON.stringify(sub));
     };
 
-    ws.onmessage = async (event) => {
-        let raw = event.data instanceof Blob ? await event.data.text() : event.data;
-        const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
-        const prices = clean.match(/\d+\.\d+/g);
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
 
-        if (prices && prices.length > 0) {
-            const lastPrice = parseFloat(filtered[filtered.length - 1]);
+            if (data && data.d && data.d.deals && data.d.deals.length > 0) {
+                const lastPrice = parseFloat(data.d.deals[0].p);
 
-                let displayText = lastPrice.toFixed(4);
+                let displayText = lastPrice.toFixed(2);
 
-                // ===== PERCENT =====
                 if (userBasePrice !== null) {
                     const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
                     const sign = percent >= 0 ? "+" : "";
@@ -173,7 +171,6 @@ function connectWS() {
                     setFavicon("#ffffff");
                 }
 
-                // ===== TRIGGER LOGIC =====
                 if (triggerPrice !== null && !triggered) {
                     const tolerance = triggerPrice * (tolerancePercent / 100);
                     const min = triggerPrice - tolerance;
@@ -184,7 +181,6 @@ function connectWS() {
                     }
                 }
 
-                // ===== TITLE =====
                 if (triggered) {
                     document.title = "🟩🟩🟩 " + displayText;
                 } else {
@@ -193,7 +189,18 @@ function connectWS() {
 
                 output.textContent = displayText;
             }
+
+        } catch (err) {
+            console.log("Parse error:", err);
         }
+    };
+
+    ws.onerror = () => {
+        output.textContent = "WebSocket Error";
+    };
+
+    ws.onclose = () => {
+        output.textContent = "Disconnected";
     };
 }
 
