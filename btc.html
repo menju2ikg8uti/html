@@ -19,9 +19,7 @@
     padding: 20px;
   }
 
-  h3 {
-    margin-bottom: 10px;
-  }
+  h3 { margin-bottom: 10px; }
 
   input {
     font-size: 1rem;
@@ -143,77 +141,69 @@ function connectWS() {
     ws = new WebSocket("wss://wbs-api.mexc.com/ws");
 
     ws.onopen = () => {
-        const sub = {
+        ws.send(JSON.stringify({
             method: "SUBSCRIPTION",
             params: ["spot@public.aggre.deals.v3.api.pb@100ms@BTCUSDT"]
-        };
-        ws.send(JSON.stringify(sub));
+        }));
     };
 
     ws.onmessage = async (event) => {
         let raw = event.data instanceof Blob ? await event.data.text() : event.data;
 
-        // ===== DEBUG RAW =====
         console.log("RAW:", raw);
 
-        try {
-            const data = JSON.parse(raw);
+        // ===== CLEAN STRING =====
+        const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
 
-            // ===== DEBUG PARSED =====
-            console.log("PARSED:", data);
+        // ===== AMBIL SEMUA ANGKA =====
+        const matches = clean.match(/\d+\.\d+/g);
 
-            if (data?.d?.deals) {
-                console.log("DEALS:", data.d.deals);
+        if (!matches) return;
+
+        // ===== FILTER KHUSUS BTC =====
+        const validPrices = matches
+            .map(Number)
+            .filter(p => p > 10000 && p < 200000); // range realistis BTC
+
+        if (validPrices.length === 0) return;
+
+        const lastPrice = validPrices[validPrices.length - 1];
+
+        console.log("FILTERED:", validPrices);
+        console.log("FINAL PRICE:", lastPrice);
+
+        let displayText = formatNumber(lastPrice);
+
+        if (userBasePrice !== null) {
+            const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
+            const sign = percent >= 0 ? "+" : "";
+            displayText += ` (${sign}${percent.toFixed(2)}%)`;
+
+            if (percent >= 0) {
+                output.style.color = "#00ff00";
+                setFavicon("#00ff00");
+            } else {
+                output.style.color = "#ff5555";
+                setFavicon("#ff5555");
             }
-
-            if (data?.d?.deals && data.d.deals.length > 0) {
-                const lastDeal = data.d.deals[data.d.deals.length - 1];
-                const lastPrice = parseFloat(lastDeal.p);
-
-                // ===== DEBUG PRICE =====
-                console.log("LAST PRICE:", lastPrice);
-
-                let displayText = formatNumber(lastPrice);
-
-                if (userBasePrice !== null) {
-                    const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
-                    const sign = percent >= 0 ? "+" : "";
-                    displayText += ` (${sign}${percent.toFixed(2)}%)`;
-
-                    if (percent >= 0) {
-                        output.style.color = "#00ff00";
-                        setFavicon("#00ff00");
-                    } else {
-                        output.style.color = "#ff5555";
-                        setFavicon("#ff5555");
-                    }
-                } else {
-                    output.style.color = "#ffffff";
-                    setFavicon("#ffffff");
-                }
-
-                if (triggerPrice !== null && !triggered) {
-                    const tolerance = triggerPrice * (tolerancePercent / 100);
-                    const min = triggerPrice - tolerance;
-                    const max = triggerPrice + tolerance;
-
-                    if (lastPrice >= min && lastPrice <= max) {
-                        triggered = true;
-                    }
-                }
-
-                if (triggered) {
-                    document.title = "🟩🟩🟩 " + displayText;
-                } else {
-                    document.title = displayText;
-                }
-
-                output.textContent = displayText;
-            }
-
-        } catch (e) {
-            console.log("PARSE ERROR:", e);
+        } else {
+            output.style.color = "#ffffff";
+            setFavicon("#ffffff");
         }
+
+        // ===== TRIGGER =====
+        if (triggerPrice !== null && !triggered) {
+            const tolerance = triggerPrice * (tolerancePercent / 100);
+            if (Math.abs(lastPrice - triggerPrice) <= tolerance) {
+                triggered = true;
+            }
+        }
+
+        document.title = triggered
+            ? "🟩🟩🟩 " + displayText
+            : displayText;
+
+        output.textContent = displayText;
     };
 }
 
@@ -225,10 +215,7 @@ async function loadChart() {
         const res = await fetch(LOG_URL + "?t=" + Date.now());
         const text = await res.text();
 
-        const lines = text
-            .split("\n")
-            .map(x => x.trim())
-            .filter(x => x !== "");
+        const lines = text.split("\n").map(x => x.trim()).filter(x => x);
 
         const labels = [];
         const rawData = [];
@@ -236,11 +223,9 @@ async function loadChart() {
         lines.forEach(line => {
             const parts = line.split("|");
             if (parts.length === 2) {
-                const time = parts[0].trim();
                 const value = parseFloat(parts[1].trim());
-
                 if (!isNaN(value)) {
-                    labels.push(time);
+                    labels.push(parts[0]);
                     rawData.push(value);
                 }
             }
@@ -249,13 +234,13 @@ async function loadChart() {
         if (rawData.length === 0) return;
 
         const base = rawData[0];
-        const profitData = rawData.map(v => parseFloat((v - base).toFixed(4)));
+        const profitData = rawData.map(v => +(v - base).toFixed(4));
 
         if (!chart) {
             chart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: labels,
+                    labels,
                     datasets: [{
                         label: 'Profit (USDT)',
                         data: profitData,
@@ -273,7 +258,7 @@ async function loadChart() {
         document.getElementById("lastUpdate").textContent =
             "Last update: " + new Date().toLocaleTimeString();
 
-    } catch (err) {
+    } catch {
         document.getElementById("lastUpdate").textContent = "Error loading chart";
     }
 }
