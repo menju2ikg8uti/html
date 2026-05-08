@@ -19,7 +19,10 @@
     padding: 20px;
   }
 
-  h3 { margin-bottom: 10px; }
+  h3 {
+    margin-bottom: 10px;
+    margin-top: 30px;
+  }
 
   input {
     font-size: 1rem;
@@ -44,6 +47,7 @@
   canvas {
     max-width: 900px;
     width: 100%;
+    margin-bottom: 30px;
   }
 
   #lastUpdate {
@@ -63,16 +67,24 @@
 
 <pre id="output">Connecting...</pre>
 
+<h3>Daily Profit %</h3>
+<canvas id="dailyChart"></canvas>
+
+<h3>Total Profit (USDT)</h3>
 <canvas id="chart"></canvas>
+
 <div id="lastUpdate">Loading chart...</div>
 
 <script>
 let userBasePrice = null;
 let ws = null;
+
 let chart = null;
+let dailyChart = null;
 
 let triggerPrice = null;
 let triggered = false;
+
 const tolerancePercent = 0.01;
 
 const output = document.getElementById("output");
@@ -80,7 +92,9 @@ const baseInput = document.getElementById("basePrice");
 const reconnectBtn = document.getElementById("reconnectBtn");
 const confirmBtn = document.getElementById("confirmBtn");
 const favicon = document.getElementById("favicon");
+
 const ctx = document.getElementById('chart').getContext('2d');
+const dailyCtx = document.getElementById('dailyChart').getContext('2d');
 
 const LOG_URL = "https://raw.githubusercontent.com/menju2ikg8uti/exchange-api/main/usdt_log.txt";
 
@@ -99,6 +113,7 @@ function createFavicon(color) {
     canvas.height = 64;
 
     const ctx = canvas.getContext("2d");
+
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(32, 32, 30, 0, Math.PI * 2);
@@ -114,6 +129,7 @@ function setFavicon(color) {
 // ===== BASE =====
 function setBasePrice() {
     const val = parseFloat(baseInput.value);
+
     if (!isNaN(val) && val > 0) {
         userBasePrice = val;
         triggerPrice = val;
@@ -126,13 +142,19 @@ function setBasePrice() {
 }
 
 confirmBtn.addEventListener("click", setBasePrice);
+
 baseInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") setBasePrice();
+    if (e.key === "Enter") {
+        setBasePrice();
+    }
 });
 
 // ===== WEBSOCKET =====
 function connectWS() {
-    if (ws) ws.close();
+
+    if (ws) {
+        ws.close();
+    }
 
     output.textContent = "Connecting...";
     document.title = "Connecting...";
@@ -141,16 +163,23 @@ function connectWS() {
     ws = new WebSocket("wss://wbs-api.mexc.com/ws");
 
     ws.onopen = () => {
+
         ws.send(JSON.stringify({
             method: "SUBSCRIPTION",
-            params: ["spot@public.aggre.deals.v3.api.pb@100ms@BTCUSDT"]
+            params: [
+                "spot@public.aggre.deals.v3.api.pb@100ms@BTCUSDT"
+            ]
         }));
     };
 
     ws.onmessage = async (event) => {
-        let raw = event.data instanceof Blob ? await event.data.text() : event.data;
+
+        let raw = event.data instanceof Blob
+            ? await event.data.text()
+            : event.data;
 
         const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
+
         const matches = clean.match(/\d+\.\d+/g);
 
         if (!matches) return;
@@ -166,8 +195,12 @@ function connectWS() {
         let displayText = formatNumber(lastPrice);
 
         if (userBasePrice !== null) {
-            const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
+
+            const percent =
+                ((lastPrice - userBasePrice) / userBasePrice) * 100;
+
             const sign = percent >= 0 ? "+" : "";
+
             displayText += ` (${sign}${percent.toFixed(2)}%)`;
 
             if (percent >= 0) {
@@ -177,23 +210,36 @@ function connectWS() {
                 output.style.color = "#ff5555";
                 setFavicon("#ff5555");
             }
+
         } else {
+
             output.style.color = "#ffffff";
             setFavicon("#ffffff");
         }
 
         if (triggerPrice !== null && !triggered) {
-            const tolerance = triggerPrice * (tolerancePercent / 100);
+
+            const tolerance =
+                triggerPrice * (tolerancePercent / 100);
+
             if (Math.abs(lastPrice - triggerPrice) <= tolerance) {
                 triggered = true;
             }
         }
 
         document.title = triggered
-            ? "🟩🟩" + displayText
+            ? "🟩🟩 " + displayText
             : displayText;
 
         output.textContent = displayText;
+    };
+
+    ws.onclose = () => {
+        console.log("WS Closed");
+    };
+
+    ws.onerror = (err) => {
+        console.log(err);
     };
 }
 
@@ -201,61 +247,166 @@ reconnectBtn.addEventListener("click", connectWS);
 
 // ===== CHART =====
 async function loadChart() {
+
     try {
+
         const res = await fetch(LOG_URL + "?t=" + Date.now());
+
         const text = await res.text();
 
-        const lines = text.split("\n").map(x => x.trim()).filter(x => x);
+        const lines = text
+            .split("\n")
+            .map(x => x.trim())
+            .filter(x => x);
 
         const labels = [];
         const rawData = [];
 
+        // ===== DAILY =====
+        const dailyMap = {};
+
+        let currentDate = "";
+
         lines.forEach(line => {
+
             const parts = line.split("|");
-            if (parts.length === 2) {
-                const value = parseFloat(parts[1].trim());
-                if (!isNaN(value)) {
-                    labels.push(parts[0]);
-                    rawData.push(value);
-                }
+
+            if (parts.length !== 2) return;
+
+            const left = parts[0].trim();
+            const value = parseFloat(parts[1].trim());
+
+            if (isNaN(value)) return;
+
+            // ===== DETECT DATE =====
+            if (/^\d{4}-\d{2}-\d{2}/.test(left)) {
+                currentDate = left.split(" ")[0];
             }
+
+            if (!currentDate) return;
+
+            // ===== FULL LOG =====
+            labels.push(left);
+            rawData.push(value);
+
+            // ===== SAVE LAST VALUE PER DAY =====
+            dailyMap[currentDate] = value;
         });
 
-        if (rawData.length === 0) return;
+        // ===== TOTAL PROFIT CHART =====
+        if (rawData.length > 0) {
 
-        const base = rawData[0];
-        const profitData = rawData.map(v => +(v - base).toFixed(4));
+            const base = rawData[0];
 
-        if (!chart) {
-            chart = new Chart(ctx, {
-                type: 'line',
+            const profitData = rawData.map(v =>
+                +(v - base).toFixed(4)
+            );
+
+            if (!chart) {
+
+                chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [{
+                            label: 'Profit (USDT)',
+                            data: profitData,
+                            borderWidth: 2,
+                            tension: 0.2
+                        }]
+                    },
+                    options: {
+                        responsive: true
+                    }
+                });
+
+            } else {
+
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = profitData;
+
+                chart.update();
+            }
+        }
+
+        // ===== DAILY PROFIT % =====
+        const dailyDates = Object.keys(dailyMap);
+
+        const dailyPercentLabels = [];
+        const dailyPercentData = [];
+
+        for (let i = 1; i < dailyDates.length; i++) {
+
+            const prev = dailyMap[dailyDates[i - 1]];
+            const curr = dailyMap[dailyDates[i]];
+
+            const percent =
+                ((curr - prev) / prev) * 100;
+
+            dailyPercentLabels.push(dailyDates[i]);
+
+            dailyPercentData.push(
+                +percent.toFixed(4)
+            );
+        }
+
+        if (!dailyChart) {
+
+            dailyChart = new Chart(dailyCtx, {
+
+                type: 'bar',
+
                 data: {
-                    labels,
+                    labels: dailyPercentLabels,
                     datasets: [{
-                        label: 'Profit (USDT)',
-                        data: profitData,
-                        borderWidth: 2,
-                        tension: 0.2
+                        label: 'Daily Profit %',
+                        data: dailyPercentData,
+                        borderWidth: 1
                     }]
+                },
+
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            ticks: {
+                                callback: function(value) {
+                                    return value + "%";
+                                }
+                            }
+                        }
+                    }
                 }
             });
+
         } else {
-            chart.data.labels = labels;
-            chart.data.datasets[0].data = profitData;
-            chart.update();
+
+            dailyChart.data.labels = dailyPercentLabels;
+
+            dailyChart.data.datasets[0].data =
+                dailyPercentData;
+
+            dailyChart.update();
         }
 
         document.getElementById("lastUpdate").textContent =
-            "Last update: " + new Date().toLocaleTimeString();
+            "Last update: " +
+            new Date().toLocaleTimeString();
 
-    } catch {
-        document.getElementById("lastUpdate").textContent = "Error loading chart";
+    } catch (err) {
+
+        console.log(err);
+
+        document.getElementById("lastUpdate").textContent =
+            "Error loading chart";
     }
 }
 
 // ===== INIT =====
 connectWS();
+
 loadChart();
+
 setInterval(loadChart, 600000);
 </script>
 
