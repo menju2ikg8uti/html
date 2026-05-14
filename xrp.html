@@ -186,7 +186,7 @@ function connectWS() {
 
         const validPrices = matches
             .map(Number)
-            .filter(p => p > 10000 && p < 200000);
+            .filter(p => p > 0 && p < 100);
 
         if (validPrices.length === 0) return;
 
