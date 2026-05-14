@@ -152,9 +152,7 @@ baseInput.addEventListener("keydown", (e) => {
 // ===== WEBSOCKET =====
 function connectWS() {
 
-    if (ws) {
-        ws.close();
-    }
+    if (ws) ws.close();
 
     output.textContent = "Connecting...";
     document.title = "Connecting...";
@@ -178,35 +176,53 @@ function connectWS() {
             ? await event.data.text()
             : event.data;
 
-        const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
+        const clean =
+            raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
 
-        const matches = clean.match(/\d+\.\d+/g);
+        const matches =
+            clean.match(/\d+\.\d+/g);
 
         if (!matches) return;
 
-        const validPrices = matches
+        // ===== FILTER XRP RANGE =====
+        const filtered = matches
             .map(Number)
-            .filter(p => p > 0 && p < 100);
+            .filter(p =>
+                p >= 0.1 &&
+                p <= 5
+            );
 
-        if (validPrices.length === 0) return;
+        if (filtered.length === 0) return;
 
-        const lastPrice = validPrices[validPrices.length - 1];
+        // ===== AMBIL HARGA TERAKHIR =====
+        const lastPrice =
+            filtered[filtered.length - 1];
 
-        let displayText = formatNumber(lastPrice);
+        if (isNaN(lastPrice)) return;
 
+        let displayText =
+            lastPrice.toFixed(4);
+
+        // ===== PERCENT =====
         if (userBasePrice !== null) {
 
             const percent =
-                ((lastPrice - userBasePrice) / userBasePrice) * 100;
+                ((lastPrice - userBasePrice) /
+                userBasePrice) * 100;
 
-            const sign = percent >= 0 ? "+" : "";
+            const sign =
+                percent >= 0 ? "+" : "";
 
-            displayText += ` (${sign}${percent.toFixed(2)}%)`;
+            displayText +=
+                ` (${sign}${percent.toFixed(2)}%)`;
 
             if (percent >= 0) {
+
                 output.style.color = "#00ff00";
                 setFavicon("#00ff00");
+
             } else {
+
                 output.style.color = "#ff5555";
                 setFavicon("#ff5555");
             }
@@ -217,21 +233,34 @@ function connectWS() {
             setFavicon("#ffffff");
         }
 
+        // ===== TRIGGER =====
         if (triggerPrice !== null && !triggered) {
 
             const tolerance =
-                triggerPrice * (tolerancePercent / 100);
+                triggerPrice *
+                (tolerancePercent / 100);
 
-            if (Math.abs(lastPrice - triggerPrice) <= tolerance) {
+            const min =
+                triggerPrice - tolerance;
+
+            const max =
+                triggerPrice + tolerance;
+
+            if (
+                lastPrice >= min &&
+                lastPrice <= max
+            ) {
                 triggered = true;
             }
         }
 
+        // ===== TITLE =====
         document.title = triggered
-            ? "🟩🟩 " + displayText
+            ? "🟩🟩🟩 " + displayText
             : displayText;
 
-        output.textContent = displayText;
+        output.textContent =
+            displayText;
     };
 
     ws.onclose = () => {
@@ -243,8 +272,10 @@ function connectWS() {
     };
 }
 
-reconnectBtn.addEventListener("click", connectWS);
-
+reconnectBtn.addEventListener(
+    "click",
+    connectWS
+);
 // ===== CHART =====
 async function loadChart() {
 
