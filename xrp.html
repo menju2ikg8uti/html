@@ -5,6 +5,7 @@
 <title>Connecting...</title>
 
 <link id="favicon" rel="icon">
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
@@ -46,6 +47,7 @@
   canvas {
     max-width: 900px;
     width: 100%;
+    margin-bottom: 30px;
   }
 
   #lastUpdate {
@@ -60,41 +62,56 @@
 <h3>Latest XRP/USDT Price</h3>
 
 <input id="basePrice" type="number" step="0.0001" placeholder="Enter base price">
+
 <button id="confirmBtn">Confirm</button>
 <button id="reconnectBtn">Reconnect</button>
 
 <pre id="output">Connecting...</pre>
 
+<h3>Daily Profit %</h3>
+<canvas id="dailyChart"></canvas>
+
+<h3>Profit (USDT)</h3>
 <canvas id="chart"></canvas>
+
 <div id="lastUpdate">Loading chart...</div>
 
 <script>
 let userBasePrice = null;
 let ws = null;
 let chart = null;
+let dailyChart = null;
 
-// ===== NEW: NOTIFICATION STATE =====
+// ===== NOTIFICATION =====
 let triggerPrice = null;
 let triggered = false;
-const tolerancePercent = 0.01; // 0.01%
+
+const tolerancePercent = 0.01;
 
 const output = document.getElementById("output");
 const baseInput = document.getElementById("basePrice");
 const reconnectBtn = document.getElementById("reconnectBtn");
 const confirmBtn = document.getElementById("confirmBtn");
 const favicon = document.getElementById("favicon");
-const ctx = document.getElementById('chart').getContext('2d');
 
-const LOG_URL = "https://raw.githubusercontent.com/menju2ikg8uti/exchange-api/main/usdt_log.txt";
+const ctx = document.getElementById("chart").getContext("2d");
+const dailyCtx = document.getElementById("dailyChart").getContext("2d");
+
+const LOG_URL =
+    "https://raw.githubusercontent.com/menju2ikg8uti/exchange-api/main/usdt_log.txt";
 
 // ===== FAVICON =====
 function createFavicon(color) {
+
     const canvas = document.createElement("canvas");
+
     canvas.width = 64;
     canvas.height = 64;
 
     const ctx = canvas.getContext("2d");
+
     ctx.fillStyle = color;
+
     ctx.beginPath();
     ctx.arc(32, 32, 30, 0, Math.PI * 2);
     ctx.fill();
@@ -106,106 +123,192 @@ function setFavicon(color) {
     favicon.href = createFavicon(color);
 }
 
-// ===== BASE + TRIGGER =====
+// ===== BASE PRICE =====
 function setBasePrice() {
+
     const val = parseFloat(baseInput.value);
+
     if (!isNaN(val) && val > 0) {
+
         userBasePrice = val;
 
-        // ===== SET TRIGGER =====
         triggerPrice = val;
-        triggered = false; // reset notif
+        triggered = false;
+
     } else {
+
         userBasePrice = null;
+
         triggerPrice = null;
         triggered = false;
     }
 }
 
 confirmBtn.addEventListener("click", setBasePrice);
+
 baseInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") setBasePrice();
+
+    if (e.key === "Enter") {
+        setBasePrice();
+    }
 });
 
 // ===== WEBSOCKET =====
 function connectWS() {
-    if (ws) ws.close();
+
+    if (ws) {
+        ws.close();
+    }
 
     output.textContent = "Connecting...";
     document.title = "Connecting...";
+
     setFavicon("#888888");
 
     ws = new WebSocket("wss://wbs-api.mexc.com/ws");
 
     ws.onopen = () => {
-        const sub = {
+
+        ws.send(JSON.stringify({
             method: "SUBSCRIPTION",
-            params: ["spot@public.aggre.deals.v3.api.pb@100ms@XRPUSDT"]
-        };
-        ws.send(JSON.stringify(sub));
+            params: [
+                "spot@public.aggre.deals.v3.api.pb@100ms@XRPUSDT"
+            ]
+        }));
     };
 
     ws.onmessage = async (event) => {
-        let raw = event.data instanceof Blob ? await event.data.text() : event.data;
-        const clean = raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
-        const prices = clean.match(/\d+\.\d+/g);
 
-        if (prices && prices.length > 0) {
-            const filtered = prices.filter(p => parseFloat(p) >= 0.1 && parseFloat(p) <= 5);
-            if (filtered.length > 0) {
-                const lastPrice = parseFloat(filtered[filtered.length - 1]);
+        let raw =
+            event.data instanceof Blob
+                ? await event.data.text()
+                : event.data;
 
-                let displayText = lastPrice.toFixed(4);
+        const clean =
+            raw.replace(/[\x00-\x1F\x7F-\x9F]/g, "");
 
-                // ===== PERCENT =====
-                if (userBasePrice !== null) {
-                    const percent = ((lastPrice - userBasePrice) / userBasePrice) * 100;
-                    const sign = percent >= 0 ? "+" : "";
-                    displayText += ` (${sign}${percent.toFixed(2)}%)`;
+        const prices =
+            clean.match(/\d+\.\d+/g);
 
-                    if (percent >= 0) {
-                        output.style.color = "#00ff00";
-                        setFavicon("#00ff00");
-                    } else {
-                        output.style.color = "#ff5555";
-                        setFavicon("#ff5555");
-                    }
-                } else {
-                    output.style.color = "#ffffff";
-                    setFavicon("#ffffff");
-                }
+        if (!prices || prices.length === 0) {
+            return;
+        }
 
-                // ===== TRIGGER LOGIC =====
-                if (triggerPrice !== null && !triggered) {
-                    const tolerance = triggerPrice * (tolerancePercent / 100);
-                    const min = triggerPrice - tolerance;
-                    const max = triggerPrice + tolerance;
+        const filtered = prices.filter(p => {
 
-                    if (lastPrice >= min && lastPrice <= max) {
-                        triggered = true;
-                    }
-                }
+            const n = parseFloat(p);
 
-                // ===== TITLE =====
-                if (triggered) {
-                    document.title = "🟩🟩🟩 " + displayText;
-                } else {
-                    document.title = displayText;
-                }
+            return n >= 0.1 && n <= 5;
+        });
 
-                output.textContent = displayText;
+        if (filtered.length === 0) {
+            return;
+        }
+
+        const lastPrice =
+            parseFloat(filtered[filtered.length - 1]);
+
+        let displayText =
+            lastPrice.toFixed(4);
+
+        // ===== PERCENT =====
+        if (userBasePrice !== null) {
+
+            const percent =
+                ((lastPrice - userBasePrice) / userBasePrice) * 100;
+
+            const sign =
+                percent >= 0 ? "+" : "";
+
+            displayText +=
+                ` (${sign}${percent.toFixed(2)}%)`;
+
+            if (percent >= 0) {
+
+                output.style.color = "#00ff00";
+                setFavicon("#00ff00");
+
+            } else {
+
+                output.style.color = "#ff5555";
+                setFavicon("#ff5555");
+            }
+
+        } else {
+
+            output.style.color = "#ffffff";
+            setFavicon("#ffffff");
+        }
+
+        // ===== TRIGGER =====
+        if (triggerPrice !== null && !triggered) {
+
+            const tolerance =
+                triggerPrice * (tolerancePercent / 100);
+
+            const min =
+                triggerPrice - tolerance;
+
+            const max =
+                triggerPrice + tolerance;
+
+            if (
+                lastPrice >= min &&
+                lastPrice <= max
+            ) {
+                triggered = true;
             }
         }
+
+        // ===== TITLE =====
+        if (triggered) {
+
+            document.title =
+                "🟩🟩🟩 " + displayText;
+
+        } else {
+
+            document.title =
+                displayText;
+        }
+
+        output.textContent =
+            displayText;
+    };
+
+    ws.onclose = () => {
+
+        output.textContent =
+            "Disconnected";
+
+        document.title =
+            "Disconnected";
+
+        setFavicon("#ff0000");
+    };
+
+    ws.onerror = () => {
+
+        output.textContent =
+            "WS Error";
     };
 }
 
-reconnectBtn.addEventListener("click", connectWS);
+reconnectBtn.addEventListener(
+    "click",
+    connectWS
+);
 
-// ===== CHART =====
+// ===== LOAD CHART =====
 async function loadChart() {
+
     try {
-        const res = await fetch(LOG_URL + "?t=" + Date.now());
-        const text = await res.text();
+
+        const res =
+            await fetch(LOG_URL + "?t=" + Date.now());
+
+        const text =
+            await res.text();
 
         const lines = text
             .split("\n")
@@ -215,54 +318,199 @@ async function loadChart() {
         const labels = [];
         const rawData = [];
 
-        lines.forEach(line => {
-            const parts = line.split("|");
-            if (parts.length === 2) {
-                const time = parts[0].trim();
-                const value = parseFloat(parts[1].trim());
+        // ===== DAILY DATA =====
+        const dailyMap = {};
 
-                if (!isNaN(value)) {
-                    labels.push(time);
-                    rawData.push(value);
-                }
+        let lastDate = "";
+
+        lines.forEach(line => {
+
+            const parts =
+                line.split("|");
+
+            if (parts.length !== 2) {
+                return;
+            }
+
+            let time =
+                parts[0].trim();
+
+            const value =
+                parseFloat(parts[1].trim());
+
+            if (isNaN(value)) {
+                return;
+            }
+
+            // ===== HANDLE DATELESS TIME =====
+            if (/^\d{2}:\d{2}$/.test(time)) {
+
+                time =
+                    lastDate + " " + time;
+
+            } else {
+
+                lastDate =
+                    time.split(" ")[0];
+            }
+
+            labels.push(time);
+            rawData.push(value);
+
+            // ===== DAILY PROFIT =====
+            const date =
+                time.split(" ")[0];
+
+            if (!dailyMap[date]) {
+
+                dailyMap[date] = {
+                    first: value,
+                    last: value
+                };
+
+            } else {
+
+                dailyMap[date].last = value;
             }
         });
 
-        if (rawData.length === 0) return;
+        if (rawData.length === 0) {
+            return;
+        }
 
-        const base = rawData[0];
-        const profitData = rawData.map(v => parseFloat((v - base).toFixed(4)));
+        // ===== PROFIT CHART =====
+        const base =
+            rawData[0];
+
+        const profitData =
+            rawData.map(v => {
+
+                return parseFloat(
+                    (v - base).toFixed(4)
+                );
+            });
 
         if (!chart) {
+
             chart = new Chart(ctx, {
-                type: 'line',
+
+                type: "line",
+
                 data: {
+
                     labels: labels,
+
                     datasets: [{
-                        label: 'Profit (USDT)',
+                        label: "Profit (USDT)",
                         data: profitData,
                         borderWidth: 2,
                         tension: 0.2
                     }]
+                },
+
+                options: {
+                    responsive: true
                 }
             });
+
         } else {
-            chart.data.labels = labels;
-            chart.data.datasets[0].data = profitData;
+
+            chart.data.labels =
+                labels;
+
+            chart.data.datasets[0].data =
+                profitData;
+
             chart.update();
         }
 
+        // ===== DAILY PERCENT =====
+        const dailyLabels = [];
+        const dailyPercentData = [];
+
+        Object.keys(dailyMap).forEach(date => {
+
+            const first =
+                dailyMap[date].first;
+
+            const last =
+                dailyMap[date].last;
+
+            const percent =
+                ((last - first) / first) * 100;
+
+            dailyLabels.push(date);
+
+            dailyPercentData.push(
+                parseFloat(percent.toFixed(4))
+            );
+        });
+
+        if (!dailyChart) {
+
+            dailyChart = new Chart(dailyCtx, {
+
+                type: "bar",
+
+                data: {
+
+                    labels: dailyLabels,
+
+                    datasets: [{
+                        label: "Daily Profit %",
+                        data: dailyPercentData,
+                        borderWidth: 1
+                    }]
+                },
+
+                options: {
+
+                    responsive: true,
+
+                    scales: {
+
+                        y: {
+
+                            ticks: {
+
+                                callback: function(value) {
+                                    return value + "%";
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+        } else {
+
+            dailyChart.data.labels =
+                dailyLabels;
+
+            dailyChart.data.datasets[0].data =
+                dailyPercentData;
+
+            dailyChart.update();
+        }
+
         document.getElementById("lastUpdate").textContent =
-            "Last update: " + new Date().toLocaleTimeString();
+            "Last update: " +
+            new Date().toLocaleTimeString();
 
     } catch (err) {
-        document.getElementById("lastUpdate").textContent = "Error loading chart";
+
+        console.error(err);
+
+        document.getElementById("lastUpdate").textContent =
+            "Error loading chart";
     }
 }
 
 // ===== INIT =====
 connectWS();
+
 loadChart();
+
 setInterval(loadChart, 600000);
 </script>
 
