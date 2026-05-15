@@ -172,7 +172,7 @@ function connectWS() {
         ws.send(JSON.stringify({
             method: "SUBSCRIPTION",
             params: [
-                "spot@public.aggre.deals.v3.api.pb@1000ms@XRPUSDT"
+                "spot@public.aggre.deals.v3.api.pb@100ms@XRPUSDT"
             ]
         }));
     };
